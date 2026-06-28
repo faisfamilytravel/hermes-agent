@@ -9248,6 +9248,7 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
         event: MessageEvent,
         source: SessionSource,
         history: List[Dict[str, Any]],
+        fresh_reset_boundary: bool = False,
     ) -> Optional[str]:
         """Prepare inbound event text for the agent.
 
@@ -9480,7 +9481,11 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
                 context_note = _build_document_context_note(display_name, agent_path, mtype)
                 message_text = f"{context_note}\n\n{message_text}"
 
-        if getattr(event, "reply_to_text", None) and event.reply_to_message_id:
+        if (
+            getattr(event, "reply_to_text", None)
+            and event.reply_to_message_id
+            and not fresh_reset_boundary
+        ):
             # Always inject the reply-to pointer — even when the quoted text
             # already appears in history. The prefix isn't deduplication, it's
             # disambiguation: it tells the agent *which* prior message the user
@@ -9685,14 +9690,15 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
             session_entry.was_auto_reset = False
         
         # Emit session:start for new or auto-reset sessions
+        _is_fresh_reset = getattr(session_entry, "is_fresh_reset", False)
         _is_new_session = (
             session_entry.created_at == session_entry.updated_at
             or _was_auto_reset
-            or getattr(session_entry, "is_fresh_reset", False)
+            or _is_fresh_reset
         )
         # Consume the is_fresh_reset flag immediately so it doesn't leak
         # onto subsequent messages in the same session (issue #6508).
-        if getattr(session_entry, "is_fresh_reset", False):
+        if _is_fresh_reset:
             session_entry.is_fresh_reset = False
         if _is_new_session:
             await self.hooks.emit("session:start", {
@@ -10275,6 +10281,7 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
             event=event,
             source=source,
             history=history,
+            fresh_reset_boundary=_is_fresh_reset,
         )
         if message_text is None:
             return

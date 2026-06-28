@@ -123,6 +123,34 @@ async def test_own_message_reply_prefix_marks_assistant_message():
 
 
 @pytest.mark.asyncio
+async def test_reply_prefix_suppressed_on_first_message_after_manual_reset():
+    """A Telegram reply to a pre-/new message must not rehydrate old context.
+
+    After /new, Telegram may still send reply_to_text when the user's next
+    message is a native reply to an old assistant message. Injecting that
+    quote makes the fresh session look contaminated, so the reset boundary
+    suppresses the disambiguation prefix for that first post-reset turn.
+    """
+    runner = _make_runner()
+    source = _source()
+    event = MessageEvent(
+        text="Can we fix this?",
+        source=source,
+        reply_to_message_id="42",
+        reply_to_text="Long assistant message from before /new.",
+    )
+
+    result = await runner._prepare_inbound_message_text(
+        event=event,
+        source=source,
+        history=[],
+        fresh_reset_boundary=True,
+    )
+
+    assert result == "Can we fix this?"
+
+
+@pytest.mark.asyncio
 async def test_no_prefix_without_reply_context():
     runner = _make_runner()
     source = _source()
