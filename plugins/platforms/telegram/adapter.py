@@ -10928,6 +10928,17 @@ async def _standalone_send(
         from agent.secret_scope import get_secret
 
         token = get_secret("TELEGRAM_BOT_TOKEN", "") or ""
+    # FFT review directive expansion on the registry hook (order 171502R):
+    # the standalone_sender_fn contract carries the same guarantee as the
+    # in-tool branch, so the raw marker never reaches the Commander from
+    # any standalone route.
+    try:
+        from plugins.platforms.telegram import fft_review as _fft_rev
+        _fft_pid = _fft_rev.match_marker(message)
+    except Exception:
+        _fft_pid = None
+    if _fft_pid and token:
+        return _fft_rev.standalone_deliver(_fft_pid, token, chat_id)
     disable_link_previews = bool(
         getattr(pconfig, "extra", {}) and pconfig.extra.get("disable_link_previews")
     )
