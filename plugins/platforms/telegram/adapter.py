@@ -9717,6 +9717,25 @@ class TelegramAdapter(BasePlatformAdapter):
                     _sr = (_bpid, _btoken, msg.text.strip())
         except Exception:
             _sr = None
+        # Order 171605R Stage B: a reply to an UNBOUND review copy must
+        # never be silently discarded. If the replied-to text looks like a
+        # review message but binds nothing, refuse and name the live ones.
+        if _sr is None:
+            try:
+                _rt = getattr(getattr(msg, "reply_to_message", None), "text", "") or ""
+                import re as _re
+                if _re.match(r"^20\d\d-\d\d-\d\d \| Slot \d\d \|", _rt):
+                    from plugins.platforms.telegram import fft_review as _fft_rev
+                    _live = _fft_rev.live_bindable_ids()
+                    await msg.reply_text(
+                        "This copy is not linked for replies. Reply to "
+                        + (", ".join(f"message {m} ({f})" for m, f in _live)
+                           if _live else "the latest review message")
+                        + " instead. Your instruction was NOT recorded."
+                    )
+                    return
+            except Exception:
+                pass
         if _sr:
             _pid, _token, _instr = _sr
             _chat = getattr(getattr(msg, "chat", None), "id", None)

@@ -423,6 +423,24 @@ def extend_packet_with_replacements(flow, packet_id: str) -> list[int]:
     return added
 
 
+def live_bindable_ids(state_root: Optional[Path] = None):
+    """(message_id, format) pairs for items awaiting instructions."""
+    out = []
+    root = Path(state_root or STATE_ROOT) / "review-ux" / "packets"
+    for path in sorted(glob.glob(str(root / "*.json"))):
+        try:
+            st = json.loads(Path(path).read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        for item in st.get("items", []):
+            if item.get("status") == "AWAITING_INSTRUCTIONS":
+                ids = item.get("telegram_chunk_ids") or []
+                mid = ids[-1] if ids else item.get("telegram_message_id")
+                if mid:
+                    out.append((str(mid), item.get("format", "script")))
+    return out
+
+
 def completion_summary(flow, packet_id: str) -> str:
     state = flow._load(packet_id)
     close = packet_close_text(state)
