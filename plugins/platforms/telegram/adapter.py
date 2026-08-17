@@ -5135,7 +5135,27 @@ class TelegramAdapter(BasePlatformAdapter):
         # Skip whitespace-only text to prevent Telegram 400 empty-text errors.
         if not content or not content.strip():
             return SendResult(success=True, message_id=None)
-        
+
+        # --- FFT persistent script-review directive (order 171140R AUG26) ---
+        # The agent's final response IS the directive; the raw marker must
+        # never reach the Commander. Expand it into the current pending
+        # script with APPROVE/REVISE/HOLD buttons via review_flow custody.
+        _fft_packet = None
+        try:
+            from plugins.platforms.telegram import fft_review as _fft_rev
+            _fft_packet = _fft_rev.match_marker(content)
+        except Exception:
+            _fft_packet = None
+        if _fft_packet:
+            try:
+                flow = self._fft_review_flow()
+                if not flow.current_delivered(_fft_packet):
+                    await self._send_fft_review_current(_fft_packet, chat_id)
+                return SendResult(success=True, message_id=None)
+            except Exception as exc:
+                logger.error("[Telegram] fft_review delivery failed for %s: %s", _fft_packet, exc)
+                return SendResult(success=False, error=f"fft_review delivery failed: {exc}")
+
         try:
             # Bot API 10.1 rich fast-path: send the raw agent markdown via
             # sendRichMessage so tables/task lists/etc. render natively. Falls
@@ -7009,6 +7029,159 @@ class TelegramAdapter(BasePlatformAdapter):
         except Exception:
             pass
 
+    def _fft_review_flow(self):
+        """Construct the fail-closed review custody flow (order 171140R)."""
+        from plugins.platforms.telegram import fft_review as _fft_rev
+        return _fft_rev.get_flow()
+
+    async def _send_fft_review_current(self, packet_id: str, chat_id: str) -> None:
+        """Send the current PENDING script with APPROVE/REVISE/HOLD buttons.
+
+        One script at a time, per review doctrine: the next script sends only
+        after the current one resolves. delivered_at/tg_msg_id are recorded
+        only on a confirmed send; a failed send records a send_failed event
+        and marks nothing delivered.
+        """
+        from plugins.platforms.telegram import fft_review as _fft_rev
+        flow = self._fft_review_flow()
+        try:
+            _fft_rev.extend_packet_with_replacements(flow, packet_id)
+        except Exception:
+            pass
+        state = flow._load(packet_id)
+        # STRICT ONE AT A TIME (171431R): a delivered-pending or awaiting
+        # item holds the floor; nothing else goes out.
+        _blk = _fft_rev.blocking_index(state)
+        if _blk is not None:
+            return
+        idx = _fft_rev.first_pending_index(state)
+        if idx is None:
+            await self._bot.send_message(
+                chat_id=int(chat_id),
+                text=_fft_rev.completion_summary(flow, packet_id),
+            )
+            return
+        item = state["items"][idx]
+        if item.get("delivered_at"):
+            return
+        text = _fft_rev.render_item(flow, packet_id, idx)
+        rows = _fft_rev.keyboard_rows(packet_id, idx)
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton(b["text"], callback_data=b["callback_data"])
+             for b in row] for row in rows
+        ])
+        chunks = _fft_rev.chunk_text(text)
+        sent_ids = []
+        try:
+            for i, part in enumerate(chunks):
+                last = (i == len(chunks) - 1)
+                msg = await self._bot.send_message(
+                    chat_id=int(chat_id),
+                    text=part,
+                    reply_markup=keyboard if last else None,
+                )
+                sent_ids.append(getattr(msg, "message_id", None))
+        except Exception as exc:
+            try:
+                _fft_rev.record_event(packet_id, {
+                    "action": "send_failed",
+                    "script_id": item.get("script_id"),
+                    "error": str(exc)[:300],
+                }, flow=flow)
+            except Exception:
+                pass
+            raise
+        _fft_rev.mark_item_delivered(
+            flow, packet_id, idx,
+            str(sent_ids[-1]) if sent_ids else None, sent_ids,
+        )
+
+    async def _handle_fft_review_callback(self, query, data: str) -> None:
+        """Record a Commander review ruling BEFORE anything acts on it."""
+        from plugins.platforms.telegram import fft_review as _fft_rev
+        parts = data.split(":")
+        if len(parts) != 4:
+            await query.answer(text="Malformed review callback.")
+            return
+        _, packet_id, index_raw, action = parts
+        user_id = str(getattr(getattr(query, "from_user", None), "id", ""))
+        allowed_csv = _scoped_gate_env("TELEGRAM_ALLOWED_USERS").strip()
+        allowed = {x.strip() for x in allowed_csv.split(",") if x.strip()}
+        if not allowed or user_id not in allowed:
+            await query.answer(text="Not authorized for this review packet.")
+            return
+        chat_id = getattr(getattr(query, "message", None), "chat_id", None)
+        ReviewFlowError = _fft_rev.review_error()
+        flow = self._fft_review_flow()
+        if action == "hold":
+            # RETIRED 171245R AUG26 by Commander ruling: HOLD created a
+            # backlog that never resolves. Path retired in place per FFT
+            # convention; recorded HOLD events in old packets stay history.
+            await query.answer(
+                text="HOLD was retired by Commander ruling 171245R. Use REJECT."
+            )
+            return
+        if action not in ("approve", "revise", "reject"):
+            await query.answer(text="Unsupported review action.")
+            return
+        try:
+            result = flow.select(
+                packet_id, int(index_raw), action,
+                chat_id=chat_id, user_id=user_id,
+            )
+        except ReviewFlowError as exc:
+            await query.answer(text=str(exc))
+            return
+        if result.get("kind") == "awaiting_instructions":
+            # Order 171445R Stage C: plain reply is the instruction path;
+            # the SR token stays working silently as a fallback.
+            await query.edit_message_text(
+                "REVISE recorded. Reply to the script message with what to "
+                "change, in your own words. The script returns for rework "
+                "once your reply arrives."
+            )
+            return
+        item = result.get("item") or {}
+        if action == "reject":
+            # Ruling already recorded by select() above (events[] +
+            # disposition REJECTED + RETIRED custody) BEFORE anything here.
+            state = flow._load(packet_id)
+            replace_note = ""
+            try:
+                tid = _fft_rev.create_replacement_card(
+                    item, state.get("created_date"),
+                    state.get("packet_time_et") or state.get("packet_time"),
+                )
+                replace_note = (
+                    f"Replacement authoring card {tid} dispatched to S-9 via "
+                    "the board (Mission Control dispatcher). It arrives for "
+                    "review when it passes the same gates."
+                )
+            except Exception as exc:
+                # Order 171245R 1c.v: silence is not an allowed outcome.
+                replace_note = (
+                    f"REPLACEMENT COULD NOT BE COMMISSIONED: {str(exc)[:200]}. "
+                    "The slot is empty and needs an order."
+                )
+            await query.edit_message_text(
+                f"REJECTED: {item.get('script_id')} v{item.get('version')}\n"
+                f"Recorded {item.get('resolved_at')}. Body and hash preserved "
+                f"as RETIRED history.\n{replace_note}"
+            )
+        else:
+            await query.edit_message_text(
+                f"APPROVED as written: {item.get('script_id')} v{item.get('version')}\n"
+                f"Recorded {item.get('resolved_at')}. Stockpile custody only; "
+                "no rendering, scheduling, upload, or publication is authorized."
+            )
+        if result.get("kind") == "next":
+            await self._send_fft_review_current(packet_id, str(chat_id or user_id))
+        elif result.get("kind") == "complete":
+            await self._bot.send_message(
+                chat_id=int(chat_id or user_id),
+                text=_fft_rev.completion_summary(flow, packet_id),
+            )
+
     async def _handle_callback_query(
         self, update: "Update", context: "ContextTypes.DEFAULT_TYPE"
     ) -> None:
@@ -7023,6 +7196,11 @@ class TelegramAdapter(BasePlatformAdapter):
         query_chat_type = getattr(query_chat, "type", None)
         query_thread_id = getattr(query_message, "message_thread_id", None)
         query_user_name = getattr(query.from_user, "first_name", None)
+
+        # --- FFT persistent script-review callbacks (order 171140R) ---
+        if data.startswith("sr:"):
+            await self._handle_fft_review_callback(query, data)
+            return
 
         # --- Model picker callbacks ---
         if data.startswith(("mp:", "mpg:", "mpv:", "mm:", "mc:", "mb", "mx", "mg:")):
@@ -9519,6 +9697,50 @@ class TelegramAdapter(BasePlatformAdapter):
         if not self._should_process_message(msg):
             if self._should_observe_unmentioned_group_message(msg):
                 self._observe_unmentioned_group_message(msg, MessageType.TEXT, update_id=update.update_id)
+            return
+        # --- FFT review revision instructions: SR <packet> <token>: <text> ---
+        # (order 171140R; plain-reply binding added by order 171245R item 2)
+        # Recorded through review_flow custody; the ruling is written before
+        # any acknowledgement is sent. A plain Telegram reply to the review
+        # message binds by the replied-to message id; the SR token syntax
+        # stays working as the fallback.
+        try:
+            from plugins.platforms.telegram import fft_review as _fft_rev
+            _sr = _fft_rev.match_sr(msg.text)
+            if _sr is None:
+                _replied = getattr(
+                    getattr(msg, "reply_to_message", None), "message_id", None
+                )
+                _bind = _fft_rev.find_reply_binding(_replied)
+                if _bind is not None and (msg.text or "").strip():
+                    _bpid, _bidx, _btoken = _bind
+                    _sr = (_bpid, _btoken, msg.text.strip())
+        except Exception:
+            _sr = None
+        if _sr:
+            _pid, _token, _instr = _sr
+            _chat = getattr(getattr(msg, "chat", None), "id", None)
+            _user = str(getattr(getattr(msg, "from_user", None), "id", ""))
+            try:
+                _flow = self._fft_review_flow()
+                _res = _flow.submit_revision(
+                    _pid, _token, _instr, chat_id=_chat, user_id=_user,
+                )
+            except Exception as _exc:
+                await msg.reply_text(f"Revision not recorded: {_exc}")
+                return
+            _item = _res.get("item") or {}
+            await msg.reply_text(
+                f"REVISION recorded for {_item.get('script_id')} "
+                f"v{_item.get('version')}. The script returns for rework."
+            )
+            if _res.get("kind") == "next":
+                await self._send_fft_review_current(_pid, str(_chat or _user))
+            elif _res.get("kind") == "complete":
+                await self._bot.send_message(
+                    chat_id=int(_chat or _user),
+                    text=_fft_rev.completion_summary(_flow, _pid),
+                )
             return
         await self._ensure_forum_commands(update.message)
 

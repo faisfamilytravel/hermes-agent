@@ -995,6 +995,17 @@ async def _send_to_platform(platform, pconfig, chat_id, message, thread_id=None,
     # limit (issue #28557). Pass the whole message in one call; media attaches
     # after all text chunks.
     if platform == Platform.TELEGRAM:
+        # --- FFT persistent script-review directive (order 171140R AUG26) ---
+        # Out-of-gateway cron delivery (source=direct) reaches Telegram here,
+        # not through the live adapter. Expand the directive so the raw
+        # marker never reaches the Commander on this path either.
+        try:
+            from plugins.platforms.telegram import fft_review as _fft_rev
+            _fft_pid = _fft_rev.match_marker(message)
+        except Exception:
+            _fft_pid = None
+        if _fft_pid:
+            return _fft_rev.standalone_deliver(_fft_pid, pconfig.token, chat_id)
         disable_link_previews = bool(getattr(pconfig, "extra", {}) and pconfig.extra.get("disable_link_previews"))
         return await _send_telegram(
             pconfig.token,
