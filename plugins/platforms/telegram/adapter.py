@@ -7145,24 +7145,16 @@ class TelegramAdapter(BasePlatformAdapter):
         if action == "reject":
             # Ruling already recorded by select() above (events[] +
             # disposition REJECTED + RETIRED custody) BEFORE anything here.
-            state = flow._load(packet_id)
-            replace_note = ""
-            try:
-                tid = _fft_rev.create_replacement_card(
-                    item, state.get("created_date"),
-                    state.get("packet_time_et") or state.get("packet_time"),
-                )
-                replace_note = (
-                    f"Replacement authoring card {tid} dispatched to S-9 via "
-                    "the board (Mission Control dispatcher). It arrives for "
-                    "review when it passes the same gates."
-                )
-            except Exception as exc:
-                # Order 171245R 1c.v: silence is not an allowed outcome.
-                replace_note = (
-                    f"REPLACEMENT COULD NOT BE COMMISSIONED: {str(exc)[:200]}. "
-                    "The slot is empty and needs an order."
-                )
+            # Order 171745R Stage C: the reason is REQUIRED input; no
+            # replacement is commissioned until the Commander supplies it.
+            st2 = flow._load(packet_id)
+            st2["items"][int(index_raw)]["awaiting_rejection_reason"] = True
+            flow._write(st2)
+            replace_note = (
+                "Reply to this message with WHY, in your own words. The "
+                "replacement will NOT start until your reason arrives; it "
+                "becomes required authoring input for S-9."
+            )
             await query.edit_message_text(
                 f"REJECTED: {item.get('script_id')} v{item.get('version')}\n"
                 f"Recorded {item.get('resolved_at')}. Body and hash preserved "
@@ -7177,10 +7169,19 @@ class TelegramAdapter(BasePlatformAdapter):
         if result.get("kind") == "next":
             await self._send_fft_review_current(packet_id, str(chat_id or user_id))
         elif result.get("kind") == "complete":
-            await self._bot.send_message(
-                chat_id=int(chat_id or user_id),
-                text=_fft_rev.completion_summary(flow, packet_id),
-            )
+            # Order 171745R Stage D: a completing packet must advance its
+            # replacements; it may never orphan one.
+            try:
+                _added = _fft_rev.extend_packet_with_replacements(flow, packet_id)
+            except Exception:
+                _added = []
+            if _added:
+                await self._send_fft_review_current(packet_id, str(chat_id or user_id))
+            else:
+                await self._bot.send_message(
+                    chat_id=int(chat_id or user_id),
+                    text=_fft_rev.completion_summary(flow, packet_id),
+                )
 
     async def _handle_callback_query(
         self, update: "Update", context: "ContextTypes.DEFAULT_TYPE"
@@ -9736,6 +9737,20 @@ class TelegramAdapter(BasePlatformAdapter):
                     return
             except Exception:
                 pass
+        if _sr and _sr[1] == "__REASON__":
+            _pid, _, _reason_idx_probe = _sr[0], _sr[1], None
+            try:
+                from plugins.platforms.telegram import fft_review as _fft_rev
+                _bind = _fft_rev.find_reply_binding(
+                    getattr(getattr(msg, "reply_to_message", None), "message_id", None))
+                _tid = _fft_rev.bind_rejection_reason(_bind[0], _bind[1], msg.text.strip())
+                await msg.reply_text(
+                    "Reason recorded verbatim and bound. Replacement card "
+                    f"{_tid} dispatched to S-9 with your reason as required input."
+                )
+            except Exception as _exc:
+                await msg.reply_text(f"Reason NOT recorded: {_exc}")
+            return
         if _sr:
             _pid, _token, _instr = _sr
             _chat = getattr(getattr(msg, "chat", None), "id", None)

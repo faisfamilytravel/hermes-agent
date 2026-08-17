@@ -331,10 +331,12 @@ def find_reply_binding(replied_msg_id, state_root: Optional[Path] = None):
             if rid in ids and item.get("status") == "AWAITING_INSTRUCTIONS" \
                     and item.get("revision_token"):
                 return (state["packet_id"], i, item["revision_token"])
+            if rid in ids and item.get("awaiting_rejection_reason"):
+                return (state["packet_id"], i, "__REASON__")
     return None
 
 
-def create_replacement_card(item: dict, created_date: str, packet_time: str) -> str:
+def create_replacement_card(item: dict, created_date: str, packet_time: str, reason: str = "") -> str:
     """Commission an S-9 replacement script for a rejected slot.
 
     Routing: a Kanban card on the recurring pipeline board, claimed and
@@ -347,7 +349,11 @@ def create_replacement_card(item: dict, created_date: str, packet_time: str) -> 
     seq = int(item["sequence"])
     title = (f"FFT {packet_time} {created_date} S-9 REPLACEMENT for rejected "
              f"slot {seq:02d} ({item['script_id']})")
+    if not (reason or "").strip():
+        raise RuntimeError(
+            "rejection reason is REQUIRED authoring input; replacement not commissioned")
     body = (
+        f"COMMANDER REJECTION REASON, verbatim, REQUIRED INPUT:\n{reason.strip()}\n\n"
         f"COMMANDER REJECTED {item['script_id']} v{item['version']} in review. "
         f"Author a REPLACEMENT script for created_date {created_date}, "
         f"sequence {seq:02d}, packet {packet_time}, format {item['format']}.\n"
@@ -470,3 +476,25 @@ def completion_summary(flow, packet_id: str) -> str:
 # def record_hold(packet_id, index, by):
 #     record_event(packet_id, {"action": "hold", "index": index, "by": by})
 # ---------------------------------------------------------------------------
+
+
+def bind_rejection_reason(packet_id: str, index: int, reason: str) -> str:
+    """Order 171745R Stage C: reason is durable, bound, and gates authoring."""
+    if not reason.strip():
+        raise RuntimeError("empty rejection reason")
+    flow = get_flow()
+    state = flow._load(packet_id)
+    item = state["items"][index]
+    item["rejection_reason"] = reason.strip()
+    item.pop("awaiting_rejection_reason", None)
+    state.setdefault("events", []).append({
+        "at": _module().now_utc(), "action": "rejection_reason_bound",
+        "script_id": item["script_id"], "version": item["version"],
+        "reason_verbatim": reason.strip(),
+    })
+    flow._write(state)
+    return create_replacement_card(
+        item, state.get("created_date"),
+        state.get("packet_time_et") or state.get("packet_time"),
+        reason=reason.strip(),
+    )
