@@ -284,8 +284,13 @@ def standalone_deliver(packet_id: str, token: str, chat_id: str,
         except Exception:
             pass
         return {"error": f"fft_review standalone delivery failed: {exc}"}
+    kb_echo = bool((out.get("result") or {}).get("reply_markup"))
+    record_event(packet_id, {"action": "delivered", "script_id": item.get("script_id"),
+                             "message_id": str(ids[-1]) if ids else None,
+                             "keyboard_rendered_api_echo": kb_echo}, flow=flow)
     mark_item_delivered(flow, packet_id, index, ids[-1] if ids else None, ids)
-    return {"success": True, "message_id": str(ids[-1]) if ids else None}
+    return {"success": True, "message_id": str(ids[-1]) if ids else None,
+            "keyboard_rendered_api_echo": kb_echo}
 
 
 def _post_message_raw(token: str, payload: dict) -> dict:
@@ -433,7 +438,9 @@ def live_bindable_ids(state_root: Optional[Path] = None):
         except Exception:
             continue
         for item in st.get("items", []):
-            if item.get("status") == "AWAITING_INSTRUCTIONS":
+            live = (item.get("status") == "AWAITING_INSTRUCTIONS"
+                    or (item.get("status") == "PENDING" and item.get("delivered_at")))
+            if live:
                 ids = item.get("telegram_chunk_ids") or []
                 mid = ids[-1] if ids else item.get("telegram_message_id")
                 if mid:
