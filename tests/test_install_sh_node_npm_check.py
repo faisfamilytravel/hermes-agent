@@ -51,3 +51,22 @@ def test_managed_node_exports_its_header_directory_for_node_gyp() -> None:
     assert 'export npm_config_nodedir="$node_dir"' in text
     assert text.count("configure_managed_node_gyp_headers") == 3
 
+
+def test_node_dependency_install_uses_bounded_npm_transport_retries() -> None:
+    """Registry/proxy TLS closures must retry serially with useful diagnostics.
+
+    The install/update E2E sandbox can close concurrent TLS streams while npm
+    acquires browser-tool dependencies.  Retrying the complete install with
+    npm's fetch retries and one socket distinguishes that transport failure
+    from an installer defect without turning the installer into an unbounded
+    retry loop.
+    """
+    text = INSTALL_SH.read_text()
+
+    assert "run_npm_install_with_retry" in text
+    assert "--fetch-retries=3" in text
+    assert "--fetch-timeout=120000" in text
+    assert "--maxsockets=1" in text
+    assert "npm transport attempt" in text
+    assert "npm transport retries exhausted" in text
+

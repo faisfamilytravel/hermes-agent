@@ -2291,6 +2291,63 @@ run_with_timeout() {
     return 124
 }
 
+# The installer can run behind constrained TLS proxies (including the isolated
+# install/update E2E sandbox). npm's default connection fan-out can turn one
+# transient proxy close into a burst of failed fetches. Keep registry work
+# serial, let npm retry individual fetches, and retry the whole install only
+# when its own stderr identifies a transport failure. A package-resolution or
+# lifecycle-script error is therefore reported immediately as an installer
+# defect instead of being mislabeled as a flaky network.
+# Fixed bounds keep the recovery behavior predictable: at most two complete
+# installs and four minutes per attempt. These are installer-internal safety
+# limits, not user configuration.
+NPM_TRANSPORT_ATTEMPTS=2
+NPM_TRANSPORT_ATTEMPT_TIMEOUT=240
+
+npm_transport_failure() {
+    grep -Eiq \
+        'UNEXPECTED_EOF_WHILE_READING|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|socket hang up|network timeout|fetch failed' \
+        "$1"
+}
+
+# Usage: run_npm_install_with_retry <log-file> <npm-bin> <npm args...>
+run_npm_install_with_retry() {
+    local log_file="$1"
+    local npm_bin="$2"
+    shift 2
+    local attempt=1 rc=0
+
+    : >"$log_file"
+    while [ "$attempt" -le "$NPM_TRANSPORT_ATTEMPTS" ]; do
+        printf '\n--- npm transport attempt %s/%s ---\n' \
+            "$attempt" "$NPM_TRANSPORT_ATTEMPTS" >>"$log_file"
+        if run_with_timeout "$NPM_TRANSPORT_ATTEMPT_TIMEOUT" "$npm_bin" \
+            --fetch-retries=3 \
+            --fetch-retry-mintimeout=1000 \
+            --fetch-retry-maxtimeout=10000 \
+            --fetch-timeout=120000 \
+            --maxsockets=1 \
+            --loglevel=warn \
+            "$@" >>"$log_file" 2>&1; then
+            return 0
+        else
+            rc=$?
+        fi
+
+        if ! npm_transport_failure "$log_file"; then
+            printf '%s\n' 'npm failure is not a recognized transport/proxy error; not retrying.' >>"$log_file"
+            return "$rc"
+        fi
+        if [ "$attempt" -ge "$NPM_TRANSPORT_ATTEMPTS" ]; then
+            printf '%s\n' 'npm transport retries exhausted; registry/proxy failure remains.' >>"$log_file"
+            return "$rc"
+        fi
+        printf 'npm transport failure; retrying after 5 seconds.\n' >>"$log_file"
+        sleep 5
+        attempt=$((attempt + 1))
+    done
+}
+
 # Return success only when the host is an apt release NEWER than the newest one
 # Playwright's platform resolver recognizes — the exact condition that makes
 # `playwright install` hang uninterruptibly (#35166). We scope the override
@@ -2439,9 +2496,8 @@ install_node_deps() {
         # Capture npm output so failures are diagnosable (#87340).
         local npm_log
         npm_log="$(mktemp)"
-        if ! run_with_timeout "$NODE_DEPS_TIMEOUT" npm install --silent \
-                >"$npm_log" 2>&1; then
-            log_error "npm install failed or timed out; Node.js dependencies were not installed"
+        if ! run_npm_install_with_retry "$npm_log" npm install; then
+            log_error "npm install failed; Node.js dependencies were not installed"
             if [ -s "$npm_log" ]; then
                 log_error "npm output:"
                 cat "$npm_log" >&2
@@ -2555,9 +2611,8 @@ install_node_deps() {
         # Capture npm output so failures are diagnosable (#87340).
         local tui_npm_log
         tui_npm_log="$(mktemp)"
-        if ! run_with_timeout "$NODE_DEPS_TIMEOUT" npm install --silent \
-                >"$tui_npm_log" 2>&1; then
-            log_error "TUI npm install failed or timed out; TUI dependencies were not installed"
+        if ! run_npm_install_with_retry "$tui_npm_log" npm install; then
+            log_error "TUI npm install failed; TUI dependencies were not installed"
             if [ -s "$tui_npm_log" ]; then
                 log_error "npm output:"
                 cat "$tui_npm_log" >&2
@@ -2978,10 +3033,10 @@ ensure_browser() {
     log_file="$(mktemp)"
     # Time-boxed (#39219): a stalled npm registry fetch here would otherwise
     # hang the installer with no progress, same class as the desktop build.
-    if ! run_with_timeout "$NODE_DEPS_TIMEOUT" "$npm_bin" install -g --prefix "$HERMES_HOME/node" --silent --ignore-scripts \
-        "@askjo/camofox-browser@^1.5.2" \
-        >"$log_file" 2>&1; then
-        log_error "npm install failed or timed out:"
+    # run_npm_install_with_retry invokes run_with_timeout for every attempt.
+    if ! run_npm_install_with_retry "$log_file" "$npm_bin" install -g --prefix "$HERMES_HOME/node" --ignore-scripts \
+        "@askjo/camofox-browser@^1.5.2"; then
+        log_error "npm install failed:"
         cat "$log_file" >&2
         rm -f "$log_file"
         return 1
