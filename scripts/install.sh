@@ -2342,6 +2342,12 @@ run_npm_install_with_retry() {
             printf '%s\n' 'npm transport retries exhausted; registry/proxy failure remains.' >>"$log_file"
             return "$rc"
         fi
+        # npm can leave rename staging directories behind when its process
+        # aborts mid-fetch. They turn a healed proxy into ENOTEMPTY on the next
+        # attempt, which is a stale transport artifact rather than a package
+        # or installer defect. The current working directory is the package
+        # directory being installed, so this removes only that failed attempt.
+        rm -rf -- node_modules
         printf 'npm transport failure; retrying after 5 seconds.\n' >>"$log_file"
         sleep 5
         attempt=$((attempt + 1))

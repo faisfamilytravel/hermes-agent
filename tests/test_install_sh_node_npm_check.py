@@ -70,4 +70,5 @@ def test_node_dependency_install_uses_bounded_npm_transport_retries() -> None:
     assert "npm transport attempt" in text
     assert "npm transport retries exhausted" in text
     assert "Exit handler never called" in text
+    assert 'rm -rf -- node_modules' in text
 
