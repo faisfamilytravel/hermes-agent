@@ -2306,7 +2306,7 @@ NPM_TRANSPORT_ATTEMPT_TIMEOUT=240
 
 npm_transport_failure() {
     grep -Eiq \
-        'UNEXPECTED_EOF_WHILE_READING|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|socket hang up|network timeout|fetch failed' \
+        'UNEXPECTED_EOF_WHILE_READING|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|socket hang up|network timeout|fetch failed|Exit handler never called' \
         "$1"
 }
 
