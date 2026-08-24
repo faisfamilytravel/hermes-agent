@@ -203,6 +203,10 @@ fi
 # fail even after bounded client and proxy retries.  Both variable spellings
 # are set because npm follows the environment conventions of the Node/npm
 # version installed by the release under test.
+# The installer downloads its managed Node after this stage has already built
+# the bubblewrap command.  Node-gyp therefore cannot inherit a host header
+# path here; point it at the managed location that will exist before npm runs.
+# This is a sandbox-only build-header hint, not a change to installer routing.
 exec bwrap \
   --unshare-pid \
   --die-with-parent --proc /proc --tmpfs /tmp \
@@ -230,6 +234,7 @@ exec bwrap \
   --setenv ALL_PROXY http://127.0.0.1:8080 \
   --setenv NO_PROXY registry.npmjs.org,.npmjs.org \
   --setenv no_proxy registry.npmjs.org,.npmjs.org \
+  --setenv npm_config_nodedir "$DEV_SANDBOX_HOME/.hermes/node" \
   --setenv DEV_SANDBOX_INTERACTIVE "$DEV_SANDBOX_INTERACTIVE" \
   --setenv ELECTRON_DISABLE_SANDBOX 1 \
   "${node_env[@]}" \
