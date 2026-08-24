@@ -60,3 +60,6 @@ def test_sandbox_bypasses_the_mitm_proxy_for_npm_registry_egress() -> None:
 
     assert "--setenv NO_PROXY registry.npmjs.org,.npmjs.org" in stage2
     assert "--setenv no_proxy registry.npmjs.org,.npmjs.org" in stage2
+
+    command = stage2.split("exec bwrap", 1)[1].split('"$DEV_SANDBOX_BASH"', 1)[0]
+    assert "\n  #" not in command

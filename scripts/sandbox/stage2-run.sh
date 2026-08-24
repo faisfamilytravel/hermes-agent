@@ -196,6 +196,13 @@ if [ "$DEV_SANDBOX_INTERACTIVE" = true ]; then
   dev_mounts=(--dev /dev)
 fi
 
+# The fixture proxy is authoritative for the canonical installer URL, but the
+# registry itself contains no fixtures.  Send npm's registry/tarball host
+# through the sandbox's rootless egress directly: the proxy's upstream TLS hop
+# can close before an npm request is sent, which makes a real installer matrix
+# fail even after bounded client and proxy retries.  Both variable spellings
+# are set because npm follows the environment conventions of the Node/npm
+# version installed by the release under test.
 exec bwrap \
   --unshare-pid \
   --die-with-parent --proc /proc --tmpfs /tmp \
@@ -221,13 +228,6 @@ exec bwrap \
   --setenv HTTP_PROXY http://127.0.0.1:8080 \
   --setenv HTTPS_PROXY http://127.0.0.1:8080 \
   --setenv ALL_PROXY http://127.0.0.1:8080 \
-  # The fixture proxy is authoritative for the canonical installer URL, but
-  # the registry itself contains no fixtures.  Send npm's registry/tarball
-  # host through the sandbox's rootless egress directly: the proxy's upstream
-  # TLS hop can close before an npm request is sent, which makes a real
-  # installer matrix fail even after bounded client and proxy retries.  Keep
-  # both spellings because npm follows the environment conventions of the
-  # Node/npm version installed by the release under test.
   --setenv NO_PROXY registry.npmjs.org,.npmjs.org \
   --setenv no_proxy registry.npmjs.org,.npmjs.org \
   --setenv DEV_SANDBOX_INTERACTIVE "$DEV_SANDBOX_INTERACTIVE" \
