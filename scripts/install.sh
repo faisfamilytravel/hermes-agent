@@ -919,6 +919,18 @@ npm_supports_npmrc() {
     return 0
 }
 
+configure_managed_node_gyp_headers() {
+    # A tarball-managed Node keeps its headers beneath the Hermes home rather
+    # than under the FHS default (/usr/local).  Tell node-gyp where they are so
+    # native npm dependencies can compile when a package has no prebuild for
+    # the current platform.  Do not set this for a system Node: its package
+    # manager owns the header location.
+    local node_dir="$HERMES_HOME/node"
+    if [ -f "$node_dir/include/node/common.gypi" ]; then
+        export npm_config_nodedir="$node_dir"
+    fi
+}
+
 check_node() {
     log_info "Checking Node.js (for browser tools)..."
 
@@ -955,6 +967,7 @@ check_node() {
     if [ -x "$HERMES_HOME/node/bin/node" ] && [ -x "$HERMES_HOME/node/bin/npm" ] \
         && node_satisfies_build "$("$HERMES_HOME/node/bin/node" --version)"; then
         export PATH="$HERMES_HOME/node/bin:$PATH"
+        configure_managed_node_gyp_headers
         log_success "Node.js $("$HERMES_HOME/node/bin/node" --version) found (Hermes-managed)"
         HAS_NODE=true
         return 0
@@ -1080,6 +1093,7 @@ install_node() {
     configure_managed_node_npm_prefix
 
     export PATH="$HERMES_HOME/node/bin:$PATH"
+    configure_managed_node_gyp_headers
 
     local installed_ver
     installed_ver=$("$HERMES_HOME/node/bin/node" --version 2>/dev/null)

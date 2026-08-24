@@ -35,8 +35,19 @@ def test_check_node_requires_npm_alongside_node() -> None:
 def test_check_node_managed_requires_npm() -> None:
     """The Hermes-managed Node fallback also requires its npm to exist."""
     text = INSTALL_SH.read_text()
-    assert (
-        '[ -x "$HERMES_HOME/node/bin/node" ] && [ -x "$HERMES_HOME/node/bin/npm" ] \\'
-        in text
+    expected = (
+        '[ -x "$HERMES_HOME/node/bin/node" ] && '
+        '[ -x "$HERMES_HOME/node/bin/npm" ] ' + "\\"
     )
+    assert expected in text
+
+
+def test_managed_node_exports_its_header_directory_for_node_gyp() -> None:
+    """A tarball-managed Node must compile native dependencies from its own headers."""
+    text = INSTALL_SH.read_text()
+
+    assert 'local node_dir="$HERMES_HOME/node"' in text
+    assert '[ -f "$node_dir/include/node/common.gypi" ]' in text
+    assert 'export npm_config_nodedir="$node_dir"' in text
+    assert text.count("configure_managed_node_gyp_headers") == 3
 
