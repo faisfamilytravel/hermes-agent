@@ -1,0 +1,23 @@
+▶ running per-file parallel test suite via run_tests_parallel.py
+  (TZ=UTC LANG=C.UTF-8 PYTHONHASHSEED=0; clean env)
+Discovered 5 test files (375 tests) under ['tests/hermes_cli/test_execution_provenance.py', 'tests/hermes_cli/test_apply_profile_override.py', 'tests/hermes_cli/test_kanban_db.py', 'tests/gateway/test_status_command.py', 'tests/gateway/test_status.py']; running with -j 36
+[  3.7% |    14/375 | ✓14 | ✗ 0] ✓ tests/hermes_cli/test_apply_profile_override.py (14✓, 1.5s)
+[  8.3% |    31/375 | ✓31 | ✗ 0] ✓ tests/gateway/test_status_command.py (17✓, 2.1s)
+[ 17.3% |    65/375 | ✓65 | ✗ 0] ✓ tests/hermes_cli/test_execution_provenance.py (34✓, 2.5s)
+[ 40.5% |   152/375 | ✓152 | ✗  0] ✓ tests/gateway/test_status.py (87✓, 4.5s)
+[100.0% |   375/375 | ✓375 | ✗  0] ✓ tests/hermes_cli/test_kanban_db.py (223✓, 10.0s)
+
+=== Summary: 5 files, 375 tests passed, 0 failed (100% complete) in 10.0s (36 workers) ===
+  Durations cached to test_durations.json (5 files)
+
+=== Per-file subprocess time distribution ===
+  Files:   5
+  Total subprocess CPU-wall: 20.6s  (runner wall: 10.0s, parallelism: 36x)
+  P50: 2.52s  P90: 10.01s  P95: 10.01s  P99: 10.01s  Max: 10.01s
+  <1s: 0 files (0%)  <2s: 1 files (20%)
+  Top 10 slowest:
+     10.01s  tests/hermes_cli/test_kanban_db.py
+      4.55s  tests/gateway/test_status.py
+      2.52s  tests/hermes_cli/test_execution_provenance.py
+      2.06s  tests/gateway/test_status_command.py
+      1.50s  tests/hermes_cli/test_apply_profile_override.py

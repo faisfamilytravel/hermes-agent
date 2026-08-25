@@ -1,0 +1,275 @@
+▶ running per-file parallel test suite via run_tests_parallel.py
+  (TZ=UTC LANG=C.UTF-8 PYTHONHASHSEED=0; clean env)
+Discovered 1 test files (24 tests) under ['tests/hermes_cli/test_execution_provenance.py']; running with -j 36
+[100.0% |    24/24 | ✓16 | ✗ 8] ✗ tests/hermes_cli/test_execution_provenance.py (16✓ 8✗, 0.7s)
+
+  ╔╍ Failed: tests/hermes_cli/test_execution_provenance.py ╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍
+  ║     @pytest.mark.parametrize(("argv", "secret"), [
+  ║         (["hermes", "chat", "--api-key", "sk-live"], "sk-live"),
+  ║         (["hermes", "chat", "--access_token=opaque-token"], "opaque-token"),
+  ║         (["hermes", "chat", "--client-secret", "oauth-secret"], "oauth-secret"),
+  ║         (["hermes", "chat", "--password=hunter2"], "hunter2"),
+  ║         (["hermes", "chat", "--authorization", "Bearer abc123"], "Bearer abc123"),
+  ║         (["hermes", "chat", "--cookie=session=private"], "session=private"),
+  ║         (["hermes", "chat", "--signing_key", "private-material"], "private-material"),
+  ║         (["hermes", "chat", "--webhook-token=hook-secret"], "hook-secret"),
+  ║     ])
+  ║     def test_sensitive_named_arguments_are_redacted_generically(argv, secret):
+  ║         execution_path = _redacted_execution_path(argv)
+  ║ >       assert secret not in execution_path
+  ║ E       AssertionError: assert 'hook-secret' not in 'hermes chat...=hook-secret'
+  ║ E         
+  ║ E         'hook-secret' is contained here:
+  ║ E           hermes chat --webhook-token=hook-secret
+  ║ E         ?                             +++++++++++
+  ║ 
+  ║ tests/hermes_cli/test_execution_provenance.py:202: AssertionError
+  ║ =========================== short test summary info ============================
+  ║ FAILED tests/hermes_cli/test_execution_provenance.py::test_sensitive_named_arguments_are_redacted_generically[argv0-sk-live]
+  ║ FAILED tests/hermes_cli/test_execution_provenance.py::test_sensitive_named_arguments_are_redacted_generically[argv1-opaque-token]
+  ║ FAILED tests/hermes_cli/test_execution_provenance.py::test_sensitive_named_arguments_are_redacted_generically[argv2-oauth-secret]
+  ║ FAILED tests/hermes_cli/test_execution_provenance.py::test_sensitive_named_arguments_are_redacted_generically[argv3-hunter2]
+  ║ FAILED tests/hermes_cli/test_execution_provenance.py::test_sensitive_named_arguments_are_redacted_generically[argv4-Bearer abc123]
+  ║ FAILED tests/hermes_cli/test_execution_provenance.py::test_sensitive_named_arguments_are_redacted_generically[argv5-session=private]
+  ║ FAILED tests/hermes_cli/test_execution_provenance.py::test_sensitive_named_arguments_are_redacted_generically[argv6-private-material]
+  ║ FAILED tests/hermes_cli/test_execution_provenance.py::test_sensitive_named_arguments_are_redacted_generically[argv7-hook-secret]
+  ║ ========================= 8 failed, 16 passed in 0.55s =========================
+  ║
+  ║  Repro: python -m pytest tests/hermes_cli/test_execution_provenance.py
+  ╚╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍
+
+
+=== Summary: 1 files, 16 tests passed, 8 failed (100% complete) in 0.7s (36 workers) ===
+  Durations cached to test_durations.json (1 files)
+
+=== Per-file subprocess time distribution ===
+  Files:   1
+  Total subprocess CPU-wall: 0.7s  (runner wall: 0.7s, parallelism: 36x)
+  P50: 0.70s  P90: 0.70s  P95: 0.70s  P99: 0.70s  Max: 0.70s
+  <1s: 1 files (100%)  <2s: 1 files (100%)
+  Top 10 slowest:
+      0.70s  tests/hermes_cli/test_execution_provenance.py
+
+=== Failure output ===
+
+--- tests/hermes_cli/test_execution_provenance.py ---
+============================= test session starts ==============================
+platform darwin -- Python 3.11.15, pytest-9.0.2, pluggy-1.6.0
+rootdir: /Users/rfais370/.hermes/hermes-agent
+configfile: pyproject.toml
+plugins: anyio-4.12.1, asyncio-1.3.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 24 items
+
+tests/hermes_cli/test_execution_provenance.py ............FFFFFFFF....   [100%]
+
+=================================== FAILURES ===================================
+____ test_sensitive_named_arguments_are_redacted_generically[argv0-sk-live] ____
+
+argv = ['hermes', 'chat', '--api-key', 'sk-live'], secret = 'sk-live'
+
+    @pytest.mark.parametrize(("argv", "secret"), [
+        (["hermes", "chat", "--api-key", "sk-live"], "sk-live"),
+        (["hermes", "chat", "--access_token=opaque-token"], "opaque-token"),
+        (["hermes", "chat", "--client-secret", "oauth-secret"], "oauth-secret"),
+        (["hermes", "chat", "--password=hunter2"], "hunter2"),
+        (["hermes", "chat", "--authorization", "Bearer abc123"], "Bearer abc123"),
+        (["hermes", "chat", "--cookie=session=private"], "session=private"),
+        (["hermes", "chat", "--signing_key", "private-material"], "private-material"),
+        (["hermes", "chat", "--webhook-token=hook-secret"], "hook-secret"),
+    ])
+    def test_sensitive_named_arguments_are_redacted_generically(argv, secret):
+        execution_path = _redacted_execution_path(argv)
+>       assert secret not in execution_path
+E       AssertionError: assert 'sk-live' not in 'hermes chat...-key sk-live'
+E         
+E         'sk-live' is contained here:
+E           hermes chat --api-key sk-live
+E         ?                       +++++++
+
+tests/hermes_cli/test_execution_provenance.py:202: AssertionError
+_ test_sensitive_named_arguments_are_redacted_generically[argv1-opaque-token] __
+
+argv = ['hermes', 'chat', '--access_token=opaque-token']
+secret = 'opaque-token'
+
+    @pytest.mark.parametrize(("argv", "secret"), [
+        (["hermes", "chat", "--api-key", "sk-live"], "sk-live"),
+        (["hermes", "chat", "--access_token=opaque-token"], "opaque-token"),
+        (["hermes", "chat", "--client-secret", "oauth-secret"], "oauth-secret"),
+        (["hermes", "chat", "--password=hunter2"], "hunter2"),
+        (["hermes", "chat", "--authorization", "Bearer abc123"], "Bearer abc123"),
+        (["hermes", "chat", "--cookie=session=private"], "session=private"),
+        (["hermes", "chat", "--signing_key", "private-material"], "private-material"),
+        (["hermes", "chat", "--webhook-token=hook-secret"], "hook-secret"),
+    ])
+    def test_sensitive_named_arguments_are_redacted_generically(argv, secret):
+        execution_path = _redacted_execution_path(argv)
+>       assert secret not in execution_path
+E       AssertionError: assert 'opaque-token' not in 'hermes chat...opaque-token'
+E         
+E         'opaque-token' is contained here:
+E           hermes chat --access_token=opaque-token
+E         ?                            ++++++++++++
+
+tests/hermes_cli/test_execution_provenance.py:202: AssertionError
+_ test_sensitive_named_arguments_are_redacted_generically[argv2-oauth-secret] __
+
+argv = ['hermes', 'chat', '--client-secret', 'oauth-secret']
+secret = 'oauth-secret'
+
+    @pytest.mark.parametrize(("argv", "secret"), [
+        (["hermes", "chat", "--api-key", "sk-live"], "sk-live"),
+        (["hermes", "chat", "--access_token=opaque-token"], "opaque-token"),
+        (["hermes", "chat", "--client-secret", "oauth-secret"], "oauth-secret"),
+        (["hermes", "chat", "--password=hunter2"], "hunter2"),
+        (["hermes", "chat", "--authorization", "Bearer abc123"], "Bearer abc123"),
+        (["hermes", "chat", "--cookie=session=private"], "session=private"),
+        (["hermes", "chat", "--signing_key", "private-material"], "private-material"),
+        (["hermes", "chat", "--webhook-token=hook-secret"], "hook-secret"),
+    ])
+    def test_sensitive_named_arguments_are_redacted_generically(argv, secret):
+        execution_path = _redacted_execution_path(argv)
+>       assert secret not in execution_path
+E       AssertionError: assert 'oauth-secret' not in 'hermes chat...oauth-secret'
+E         
+E         'oauth-secret' is contained here:
+E           hermes chat --client-secret oauth-secret
+E         ?                             ++++++++++++
+
+tests/hermes_cli/test_execution_provenance.py:202: AssertionError
+____ test_sensitive_named_arguments_are_redacted_generically[argv3-hunter2] ____
+
+argv = ['hermes', 'chat', '--password=hunter2'], secret = 'hunter2'
+
+    @pytest.mark.parametrize(("argv", "secret"), [
+        (["hermes", "chat", "--api-key", "sk-live"], "sk-live"),
+        (["hermes", "chat", "--access_token=opaque-token"], "opaque-token"),
+        (["hermes", "chat", "--client-secret", "oauth-secret"], "oauth-secret"),
+        (["hermes", "chat", "--password=hunter2"], "hunter2"),
+        (["hermes", "chat", "--authorization", "Bearer abc123"], "Bearer abc123"),
+        (["hermes", "chat", "--cookie=session=private"], "session=private"),
+        (["hermes", "chat", "--signing_key", "private-material"], "private-material"),
+        (["hermes", "chat", "--webhook-token=hook-secret"], "hook-secret"),
+    ])
+    def test_sensitive_named_arguments_are_redacted_generically(argv, secret):
+        execution_path = _redacted_execution_path(argv)
+>       assert secret not in execution_path
+E       AssertionError: assert 'hunter2' not in 'hermes chat...word=hunter2'
+E         
+E         'hunter2' is contained here:
+E           hermes chat --password=hunter2
+E         ?                        +++++++
+
+tests/hermes_cli/test_execution_provenance.py:202: AssertionError
+_ test_sensitive_named_arguments_are_redacted_generically[argv4-Bearer abc123] _
+
+argv = ['hermes', 'chat', '--authorization', 'Bearer abc123']
+secret = 'Bearer abc123'
+
+    @pytest.mark.parametrize(("argv", "secret"), [
+        (["hermes", "chat", "--api-key", "sk-live"], "sk-live"),
+        (["hermes", "chat", "--access_token=opaque-token"], "opaque-token"),
+        (["hermes", "chat", "--client-secret", "oauth-secret"], "oauth-secret"),
+        (["hermes", "chat", "--password=hunter2"], "hunter2"),
+        (["hermes", "chat", "--authorization", "Bearer abc123"], "Bearer abc123"),
+        (["hermes", "chat", "--cookie=session=private"], "session=private"),
+        (["hermes", "chat", "--signing_key", "private-material"], "private-material"),
+        (["hermes", "chat", "--webhook-token=hook-secret"], "hook-secret"),
+    ])
+    def test_sensitive_named_arguments_are_redacted_generically(argv, secret):
+        execution_path = _redacted_execution_path(argv)
+>       assert secret not in execution_path
+E       assert 'Bearer abc123' not in "hermes chat...arer abc123'"
+E         
+E         'Bearer abc123' is contained here:
+E           hermes chat --authorization 'Bearer abc123'
+E         ?                              +++++++++++++
+
+tests/hermes_cli/test_execution_provenance.py:202: AssertionError
+_ test_sensitive_named_arguments_are_redacted_generically[argv5-session=private] _
+
+argv = ['hermes', 'chat', '--cookie=session=private']
+secret = 'session=private'
+
+    @pytest.mark.parametrize(("argv", "secret"), [
+        (["hermes", "chat", "--api-key", "sk-live"], "sk-live"),
+        (["hermes", "chat", "--access_token=opaque-token"], "opaque-token"),
+        (["hermes", "chat", "--client-secret", "oauth-secret"], "oauth-secret"),
+        (["hermes", "chat", "--password=hunter2"], "hunter2"),
+        (["hermes", "chat", "--authorization", "Bearer abc123"], "Bearer abc123"),
+        (["hermes", "chat", "--cookie=session=private"], "session=private"),
+        (["hermes", "chat", "--signing_key", "private-material"], "private-material"),
+        (["hermes", "chat", "--webhook-token=hook-secret"], "hook-secret"),
+    ])
+    def test_sensitive_named_arguments_are_redacted_generically(argv, secret):
+        execution_path = _redacted_execution_path(argv)
+>       assert secret not in execution_path
+E       AssertionError: assert 'session=private' not in 'hermes chat...sion=private'
+E         
+E         'session=private' is contained here:
+E           hermes chat --cookie=session=private
+
+tests/hermes_cli/test_execution_provenance.py:202: AssertionError
+_ test_sensitive_named_arguments_are_redacted_generically[argv6-private-material] _
+
+argv = ['hermes', 'chat', '--signing_key', 'private-material']
+secret = 'private-material'
+
+    @pytest.mark.parametrize(("argv", "secret"), [
+        (["hermes", "chat", "--api-key", "sk-live"], "sk-live"),
+        (["hermes", "chat", "--access_token=opaque-token"], "opaque-token"),
+        (["hermes", "chat", "--client-secret", "oauth-secret"], "oauth-secret"),
+        (["hermes", "chat", "--password=hunter2"], "hunter2"),
+        (["hermes", "chat", "--authorization", "Bearer abc123"], "Bearer abc123"),
+        (["hermes", "chat", "--cookie=session=private"], "session=private"),
+        (["hermes", "chat", "--signing_key", "private-material"], "private-material"),
+        (["hermes", "chat", "--webhook-token=hook-secret"], "hook-secret"),
+    ])
+    def test_sensitive_named_arguments_are_redacted_generically(argv, secret):
+        execution_path = _redacted_execution_path(argv)
+>       assert secret not in execution_path
+E       AssertionError: assert 'private-material' not in 'hermes chat...ate-material'
+E         
+E         'private-material' is contained here:
+E           hermes chat --signing_key private-material
+E         ?                           ++++++++++++++++
+
+tests/hermes_cli/test_execution_provenance.py:202: AssertionError
+__ test_sensitive_named_arguments_are_redacted_generically[argv7-hook-secret] __
+
+argv = ['hermes', 'chat', '--webhook-token=hook-secret'], secret = 'hook-secret'
+
+    @pytest.mark.parametrize(("argv", "secret"), [
+        (["hermes", "chat", "--api-key", "sk-live"], "sk-live"),
+        (["hermes", "chat", "--access_token=opaque-token"], "opaque-token"),
+        (["hermes", "chat", "--client-secret", "oauth-secret"], "oauth-secret"),
+        (["hermes", "chat", "--password=hunter2"], "hunter2"),
+        (["hermes", "chat", "--authorization", "Bearer abc123"], "Bearer abc123"),
+        (["hermes", "chat", "--cookie=session=private"], "session=private"),
+        (["hermes", "chat", "--signing_key", "private-material"], "private-material"),
+        (["hermes", "chat", "--webhook-token=hook-secret"], "hook-secret"),
+    ])
+    def test_sensitive_named_arguments_are_redacted_generically(argv, secret):
+        execution_path = _redacted_execution_path(argv)
+>       assert secret not in execution_path
+E       AssertionError: assert 'hook-secret' not in 'hermes chat...=hook-secret'
+E         
+E         'hook-secret' is contained here:
+E           hermes chat --webhook-token=hook-secret
+E         ?                             +++++++++++
+
+tests/hermes_cli/test_execution_provenance.py:202: AssertionError
+=========================== short test summary info ============================
+FAILED tests/hermes_cli/test_execution_provenance.py::test_sensitive_named_arguments_are_redacted_generically[argv0-sk-live]
+FAILED tests/hermes_cli/test_execution_provenance.py::test_sensitive_named_arguments_are_redacted_generically[argv1-opaque-token]
+FAILED tests/hermes_cli/test_execution_provenance.py::test_sensitive_named_arguments_are_redacted_generically[argv2-oauth-secret]
+FAILED tests/hermes_cli/test_execution_provenance.py::test_sensitive_named_arguments_are_redacted_generically[argv3-hunter2]
+FAILED tests/hermes_cli/test_execution_provenance.py::test_sensitive_named_arguments_are_redacted_generically[argv4-Bearer abc123]
+FAILED tests/hermes_cli/test_execution_provenance.py::test_sensitive_named_arguments_are_redacted_generically[argv5-session=private]
+FAILED tests/hermes_cli/test_execution_provenance.py::test_sensitive_named_arguments_are_redacted_generically[argv6-private-material]
+FAILED tests/hermes_cli/test_execution_provenance.py::test_sensitive_named_arguments_are_redacted_generically[argv7-hook-secret]
+========================= 8 failed, 16 passed in 0.55s =========================
+
+=== 1 file with test failures (8 tests failed) ===
+  tests/hermes_cli/test_execution_provenance.py  (8 tests failed)

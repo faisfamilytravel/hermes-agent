@@ -1,0 +1,13 @@
+probe 01: PASS: hermes chat --API_KEY '[REDACTED]'
+probe 02: PASS: hermes chat '--access-token=[REDACTED]'
+probe 03: PASS: hermes chat --private_key '[REDACTED]'
+probe 04: PASS: hermes chat --auth-token '[REDACTED]' '--client-secret=[REDACTED]'
+probe 05: PASS: hermes chat --authorization '[REDACTED]'
+probe 06: PASS: hermes chat '--query=[REDACTED]'
+probe 07: PASS: hermes chat --prompt '[REDACTED]'
+probe 08: PASS: hermes chat --token-count 4096
+probe 09: PASS: hermes chat --password-policy strict
+probe 10: PASS: hermes chat --secret-santa enabled
+probe 11: PASS: hermes chat --monkey visible
+probe 12: PASS: hermes chat --my-key identifier
+ADVERSARIAL_PROBES_PASS=12

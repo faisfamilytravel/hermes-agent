@@ -1,0 +1,255 @@
+LOUD-FAIL staff-bus-retired: Staff Bus RETIRED 120824R: operation 'tasking_requires_xo_verification' is DISABLED — the transport was removed. Migrate this path to the board. Attempt was logged to /Users/rfais370/.hermes/profiles/mission-ctrl/tmp/mc-harness-xyr4leuw/a10-faillog.log. History parked read-only at /Users/rfais370/.hermes/state/fft-command-staff.db.
+LOUD-FAIL staff-bus-retired: Staff Bus RETIRED 120824R: operation 'detect_stale' is DISABLED — the transport was removed. Migrate this path to the board. Attempt was logged to /Users/rfais370/.hermes/profiles/mission-ctrl/tmp/mc-harness-xyr4leuw/a21-faillog.log. History parked read-only at /Users/rfais370/.hermes/state/fft-command-staff.db.
+{
+ "sandbox": "/Users/rfais370/.hermes/profiles/mission-ctrl/tmp/mc-harness-xyr4leuw",
+ "classifier_source": "REAL enforcer import",
+ "events": [
+  "tick 1: t-ordinary: claimed (answer-door custody, no worker)",
+  "tick 1: t-ordinary: contract SYNTHESIZED by REAL repair-4 module",
+  "tick 2: t-ordinary: executed by bridge, artifact, review-ready",
+  "tick 5: t-ordinary: XO lane created by REAL classifier",
+  "tick 6: t-ordinary: XO executed + terminal"
+ ],
+ "baseline": [
+  {
+   "assertion": "A1 claimed within SLA",
+   "result": "PASS",
+   "evidence": "claimed_tick=1 (answer-door custody)"
+  },
+  {
+   "assertion": "A2 claim followed by real execution (artifact) within SLA",
+   "result": "PASS",
+   "evidence": "artifact_tick=2 (ordinary task has no bridge contract: R1)"
+  },
+  {
+   "assertion": "A3 disposition routing without subject-prefix (REAL enforcer import)",
+   "result": "PASS",
+   "evidence": "xo_lane_tick=5"
+  },
+  {
+   "assertion": "A4 exactly one terminal state within run",
+   "result": "PASS",
+   "evidence": "terminal_tick=6"
+  },
+  {
+   "assertion": "A5 no stale/zombie residue at exit",
+   "result": "PASS",
+   "evidence": "final lifecycle_state='completed'"
+  },
+  {
+   "assertion": "A6 contract task not serialized behind unrelated worker (spawn-one)",
+   "result": "PASS",
+   "evidence": "bridge share 4 with 1 live -> available 3; kanban cap 2; partition total 6 == 6"
+  },
+  {
+   "assertion": "A7 return-receipt leg fails closed on retired transport, no false receipt claims (REAL enforcer; PRODUCTION GAP: receipts unsent since 120824R, board migration owed)",
+   "result": "PASS",
+   "evidence": "refused sends reported not-ok both passes=True, phantom return rows=0 (must be 0), false RETURN_SENT stamp=False (must be False), transport attempts=2"
+  },
+  {
+   "assertion": "A8 contract XO_VERIFICATION_REQUIRED: false suppresses XO lane (REAL classifier)",
+   "result": "PASS",
+   "evidence": "false-flag row routed to XO=False (must be False), true-flag twin routed=True (must be True)"
+  },
+  {
+   "assertion": "A9 contract gate stays deleted: content-blind dispatcher reports no contract gaps (ruling 080845R)",
+   "result": "PASS",
+   "evidence": "gaps=0 (must be 0; any gap means the deleted gate was rebuilt)"
+  },
+  {
+   "assertion": "A10 retired bus fails loudly on any use (order 120824R; replaces retired trusted-waiver pin)",
+   "result": "PASS",
+   "evidence": "StaffBusRetired raised=True, durable audit line written=True"
+  },
+  {
+   "assertion": "A11 enforcer minting stays deleted: xo-verification route creates no lane (ruling 080848R)",
+   "result": "PASS",
+   "evidence": "route_xo_verification returned no lane id"
+  },
+  {
+   "assertion": "A12 has_forward_path tolerates rows without child-count columns (REAL enforcer)",
+   "result": "PASS",
+   "evidence": "bare row handled, verdict=False (must be False: no proof of a path)"
+  },
+  {
+   "assertion": "A13 partial authored contract is normalized and executable (REAL chain)",
+   "result": "PASS",
+   "evidence": "normalized=True, gaps=[]"
+  },
+  {
+   "assertion": "A14 claimed row without worker proof requires active recovery (REAL reconciler)",
+   "result": "PASS",
+   "evidence": "findings=['open_without_execution_proof']"
+  },
+  {
+   "assertion": "A15 recoverable Commander-NO packet is suppressed; exact YES can emit (REAL firewall)",
+   "result": "PASS",
+   "evidence": "NO emitted=False; YES emitted=True; health tri-state=[True, True, True]"
+  },
+  {
+   "assertion": "A16 Staff Bus/bridge/Kanban/artifact/hash clean chain reconciles (REAL reconciler)",
+   "result": "PASS",
+   "evidence": "clean=True, findings=[]"
+  },
+  {
+   "assertion": "A17 changed artifact invalidates stale exact-hash review without paging Commander (REAL reconciler)",
+   "result": "PASS",
+   "evidence": "findings=['artifact_hash_mismatch', 'staff_recovery_required_commander_no'], Commander allowed=False"
+  },
+  {
+   "assertion": "A18 active, dependency-queued, or evidence-terminal states are valid closure paths (REAL reconciler)",
+   "result": "PASS",
+   "evidence": "valid states=[True, True, True]"
+  },
+  {
+   "assertion": "A19 escaped and canonical Commander fields preserve NO/YES semantics (REAL health parser)",
+   "result": "PASS",
+   "evidence": "live field semantics=[True, True, True]"
+  },
+  {
+   "assertion": "A20 terminal archive rows do not become active artifact/recovery debt (REAL reconciler)",
+   "result": "PASS",
+   "evidence": "archive states clean=[True, True, True]"
+  },
+  {
+   "assertion": "A21 retired bus stale-guard fails loudly, never silently no-ops (order 120824R; replaces bridge-suppression pin)",
+   "result": "PASS",
+   "evidence": "StaffBusRetired raised=True, durable audit line written=True"
+  },
+  {
+   "assertion": "A22 fresh-process terminal verifier preserves completed exact-hash worker evidence (REAL bridge)",
+   "result": "PASS",
+   "evidence": "result={'ok': True, 'protocol_terminal': True, 'mission_resolved': True, 'successor_required': False, 'commander_decision_required': False, 'reason': 'ok', 'state': 'completed', 'artifact_path': '/Users/rfais370/.hermes/profiles/mission-ctrl/tmp/mc-harness-xyr4leuw/fresh-terminal-artifact.md', 'artifact_sha256': '672eb8316fec83f94119a4193f9fc552513d56a147502f8be4830e017d817831', 'artifact_count': 1, 'attached_match': True, 'result_summary': 'done', 'failure_reason': None, 'verification_process': 'fresh'}"
+  },
+  {
+   "assertion": "A23 exact bounded Reel authority survives synthesis and validates (REAL chain)",
+   "result": "PASS",
+   "evidence": "synth=eligible, no_external=false, gaps=[]"
+  },
+  {
+   "assertion": "A24 original Commander alert-then-publish authority survives synthesis (REAL chain)",
+   "result": "PASS",
+   "evidence": "synth=eligible, gaps=[]"
+  },
+  {
+   "assertion": "A25 ambiguous external action fails closed before contract/Kanban creation (REAL synthesis)",
+   "result": "PASS",
+   "evidence": "result={'synthesized': False, 'reason': 'external_action_requires_exact_bounded_authority'}"
+  },
+  {
+   "assertion": "A26 contract-content inspection stays deleted: contradictory external text yields no gaps (ruling 080845R)",
+   "result": "PASS",
+   "evidence": "gaps=[] (must be []; any gap means the deleted gate was rebuilt)"
+  },
+  {
+   "assertion": "A27 external success requires platform IDs, permalinks, and authenticated read-back (REAL receipt guard)",
+   "result": "PASS",
+   "evidence": "incomplete={'ok': False, 'reason': 'external_platform_receipts_missing', 'missing': ['INSTAGRAM_MEDIA_OBJECT_ID', 'INSTAGRAM_PERMALINK', 'INSTAGRAM_AUTHENTICATED_READBACK', 'FACEBOOK_POST_ID', 'FACEBOOK_PERMALINK', 'FACEBOOK_AUTHENTICATED_READBACK']}, complete={'ok': True, 'reason': 'external_platform_receipts_verified', 'writes': 3, 'limit': 3}"
+  },
+  {
+   "assertion": "A28 external retry is one attempt and worker prompt is mission-isolated/Commander-clean (REAL bridge)",
+   "result": "PASS",
+   "evidence": "max_attempts=1, prompt_guards=[True, True, True]"
+  },
+  {
+   "assertion": "A29 evidence-backed formal blocker is recognized from returned text only (REAL enforcer; bus recognizer retired 120824R)",
+   "result": "PASS",
+   "evidence": "returned-blocker recognized=True (must be True), tasking-body-only recognized=False (must be False)"
+  },
+  {
+   "assertion": "A30 owner-correction minting stays deleted: XO rejection recognized, no correction row minted (ruling 080848R)",
+   "result": "PASS",
+   "evidence": "recognized=True, minted=None, xo_loops=0 (must be recognized=True, minted=None, loops=0)"
+  },
+  {
+   "assertion": "A31 MC intake-review minting stays deleted: MC-addressed input recognized, no child row minted (ruling 080848R)",
+   "result": "PASS",
+   "evidence": "recognized=True, routes1=[], routes2=[], child_count=0 (must be recognized=True, no children)"
+  },
+  {
+   "assertion": "A32 exact routine FYSA/no-ACK status row creates no execution-recovery debt (REAL enforcer)",
+   "result": "PASS",
+   "evidence": "actionable_language=False, requires_forward_disposition=False"
+  },
+  {
+   "assertion": "A33 routine actionable status row still requires forward disposition (REAL enforcer)",
+   "result": "PASS",
+   "evidence": "actionable_language=True, requires_forward_disposition=True"
+  },
+  {
+   "assertion": "A34 no-decision blocker resolves named executable successor and is not mission closure (REAL enforcer)",
+   "result": "PASS",
+   "evidence": "successor_owner=s9, has_forward_path=False"
+  },
+  {
+   "assertion": "A35 genuine Commander decision blocker remains a valid terminal handoff (REAL enforcer)",
+   "result": "PASS",
+   "evidence": "successor_owner=None, has_forward_path=True"
+  },
+  {
+   "assertion": "A36 every unique newly routed successor is immediately handed to the REAL bridge launcher",
+   "result": "PASS",
+   "evidence": "ids=['msg-a36-one', 'msg-a36-two'], launches=2, commands=2"
+  },
+  {
+   "assertion": "A37 channel-aware receipt contract does not require unrelated Instagram/Facebook proof",
+   "result": "PASS",
+   "evidence": "required_fields=('EXTERNAL_WRITES_PERFORMED', 'READINESS_MESSAGE_ID', 'READINESS_DELIVERY_READBACK')"
+  },
+  {
+   "assertion": "A38 Commander-NO plus staff-YES without execution proof is classified as an internal control failure",
+   "result": "PASS",
+   "evidence": "no_proof_control_failure=True, active_proof_accepted_internal=True"
+  },
+  {
+   "assertion": "A39 bridge no-decision blocker requires a successor and is not mission-resolved",
+   "result": "PASS",
+   "evidence": "resolution={'commander_decision_required': False, 'commander_decision_explicit_no': True, 'successor_required': True, 'mission_resolved': False}"
+  },
+  {
+   "assertion": "A40 bridge genuine Commander gate is mission-resolved as a protected terminal handoff",
+   "result": "PASS",
+   "evidence": "resolution={'commander_decision_required': True, 'commander_decision_explicit_no': False, 'successor_required': False, 'mission_resolved': True}"
+  },
+  {
+   "assertion": "A41 bridge ignores instruction prose when classifying returned successor debt",
+   "result": "PASS",
+   "evidence": "verification={'ok': True, 'protocol_terminal': True, 'commander_decision_required': False, 'commander_decision_explicit_no': False, 'successor_required': False, 'mission_resolved': True, 'reason': 'ok', 'state': 'blocked', 'artifact_path': '', 'artifact_sha256': None, 'artifact_count': 0, 'attached_match': False, 'result_summary': 'Terminal archive disposition.', 'failure_reason': 'No recoverable staff action remains.'}"
+  },
+  {
+   "assertion": "A42 no-decision staff exhaustion emits the compact informational Commander notification",
+   "result": "PASS",
+   "evidence": "kind=no_decision_informational, emit=True, header=STAFF EXECUTION FAILURE \u2014 NO COMMANDER DECISION CURRENTLY REQUIRED"
+  },
+  {
+   "assertion": "A43 protected-decision exhaustion remains distinct from no-decision informational notice",
+   "result": "PASS",
+   "evidence": "kind=decision_required, emit=True, header=\ud83d\udfe2 BLUF"
+  },
+  {
+   "assertion": "A44 first-stale recovery remains quiet before configured staff-side exhaustion",
+   "result": "PASS",
+   "evidence": "occurrences=1, ceiling=3"
+  },
+  {
+   "assertion": "A45 post-exhaustion staff continuation uses one stable idempotency key across retries",
+   "result": "PASS",
+   "evidence": "continuations=(['msg-a45-continuation'], ['msg-a45-continuation']), unique_keys=['mc-exhaustion-continuation-msg_a42_no_decision_exhausted'], calls=[{'recipient': 's6', 'key': 'mc-exhaustion-continuation-msg_a42_no_decision_exhausted'}, {'recipient': 's6', 'key': 'mc-exhaustion-continuation-msg_a42_no_decision_exhausted'}]"
+  },
+  {
+   "assertion": "A46 exhaustion Commander notification is marked exactly once across retries/restarts",
+   "result": "PASS",
+   "evidence": "first=True, second=False, marker=2026-08-24T18:32:06+00:00"
+  },
+  {
+   "assertion": "A47 routine FYSA subject without literal no-ACK creates no recovery debt (REAL enforcer)",
+   "result": "PASS",
+   "evidence": "actionable_language=False, requires_forward_disposition=False"
+  },
+  {
+   "assertion": "A48 owner recovery contract short-circuits when original source is already terminal",
+   "result": "PASS",
+   "evidence": "terminal short-circuit contract present=True"
+  }
+ ]
+}

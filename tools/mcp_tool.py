@@ -865,6 +865,40 @@ def _prepend_path(env: dict, directory: str) -> dict:
 _MCP_LIST_MAX_PAGES = 50
 
 
+class _OmitEmptyMcpMetaWriteStream:
+    """Strip SDK 2.x's empty legacy metadata object at the transport seam.
+
+    The SDK materializes ``_meta: {}`` after ``ClientSession.send_request``
+    returns, when its JSON-RPC dispatcher constructs the wire message. Legacy
+    servers interpret that 2026-only envelope differently, so remove only an
+    empty object immediately before the transport serializes it. Modern
+    requests retain their non-empty protocol metadata unchanged.
+    """
+
+    def __init__(self, stream):
+        self._stream = stream
+
+    async def send(self, item):
+        message = getattr(item, "message", None)
+        params = getattr(message, "params", None)
+        if message is not None and isinstance(params, dict) and params.get("_meta") == {}:
+            message.params = {key: value for key, value in params.items() if key != "_meta"}
+        await self._stream.send(item)
+
+    def clone(self):
+        return type(self)(self._stream.clone())
+
+    async def aclose(self):
+        await self._stream.aclose()
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        await self.aclose()
+        return False
+
+
 async def _paginate_full_list(list_method, items_attr: str, server_name: str,
                               cache_meta_out: Optional[dict] = None):
     """Drain a paginated MCP ``list_*`` call by following ``nextCursor``.
@@ -2432,6 +2466,59 @@ class MCPServerTask:
             return True
         return getattr(caps, "tools", None) is not None
 
+    async def _initialize_legacy_session(self, session):
+        """Initialize an SDK 2.x session without its empty modern envelope.
+
+        ``mcp_types`` 2.x gives ``InitializeRequestParams._meta`` an empty
+        default. That envelope belongs to the 2026 stateless protocol, but is
+        serialized even when its 2025 handshake client is selected. Strict
+        legacy servers reject it before they can negotiate a version. Build
+        the equivalent handshake request with ``_meta=None`` so
+        ``exclude_none=True`` removes the field on the wire.
+
+        SDK 1.x has neither ``mcp_types`` nor the 2.x session internals, so it
+        retains its native implementation unchanged.
+        """
+        try:
+            import mcp_types as types
+            from mcp_types.version import HANDSHAKE_PROTOCOL_VERSIONS
+        except ImportError:
+            return await session.initialize()
+
+        # Attribute presence alone is not an SDK-2 capability check: a plain
+        # ``MagicMock`` manufactures every requested attribute and would enter
+        # this path even though its ``send_request`` is not awaitable.  The
+        # SDK-2 seam is an async request method; require that concrete behavior
+        # before reading its private handshake helpers.  Real SDK-2 sessions
+        # and the protocol-wire test seam satisfy this predicate, while SDK-1
+        # sessions and lifecycle mocks retain ``initialize()``.
+        send_request = getattr(session, "send_request", None)
+        required = ("_build_capabilities", "_client_info", "adopt")
+        if not inspect.iscoroutinefunction(send_request) or not all(
+            hasattr(session, attr) for attr in required
+        ):
+            return await session.initialize()
+
+        # ``model_construct`` deliberately leaves ``_meta`` out of
+        # ``__pydantic_fields_set__``. Normal validation materializes the SDK
+        # default (an empty dict), and the HTTP transport serializes defaults
+        # with ``exclude_unset=True``. The legacy wire requires the key absent.
+        params = types.InitializeRequestParams.model_construct(
+            protocol_version=LATEST_HANDSHAKE_VERSION,
+            capabilities=session._build_capabilities(LATEST_HANDSHAKE_VERSION),
+            client_info=session._client_info,
+        )
+        result = await send_request(
+            types.InitializeRequest(params=params), types.InitializeResult
+        )
+        if result.protocol_version not in HANDSHAKE_PROTOCOL_VERSIONS:
+            raise RuntimeError(
+                f"Unsupported protocol version from the server: {result.protocol_version}"
+            )
+        session.adopt(result)
+        await session.send_notification(types.InitializedNotification())
+        return result
+
     async def _negotiate_session(self, session, connect_timeout: float):
         """Negotiate the protocol era with the server and return its result.
 
@@ -2478,11 +2565,11 @@ class MCPServerTask:
                     self.name, exc, mode,
                 )
                 return await asyncio.wait_for(
-                    session.initialize(), timeout=connect_timeout
+                    self._initialize_legacy_session(session), timeout=connect_timeout
                 )
         if mode in ("legacy", "handshake"):
             return await asyncio.wait_for(
-                session.initialize(), timeout=connect_timeout
+                self._initialize_legacy_session(session), timeout=connect_timeout
             )
         if mode != "auto":
             logger.warning(
@@ -2491,7 +2578,7 @@ class MCPServerTask:
             )
         try:
             return await asyncio.wait_for(
-                session.initialize(), timeout=connect_timeout
+                self._initialize_legacy_session(session), timeout=connect_timeout
             )
         except asyncio.TimeoutError:
             raise
@@ -3097,7 +3184,7 @@ class MCPServerTask:
                             _stdio_pids[_pid] = self.name
                         _stdio_pgids.update(new_pgids)
                 async with ClientSession(
-                    read_stream, write_stream, **sampling_kwargs
+                    read_stream, _OmitEmptyMcpMetaWriteStream(write_stream), **sampling_kwargs
                 ) as session:
                     # Bound the MCP handshake. A stdio server that never
                     # completes ``initialize`` (e.g. emits a non-JSON-RPC frame
@@ -3479,7 +3566,7 @@ class MCPServerTask:
             try:
                 async with sse_client(**_sse_kwargs) as (read_stream, write_stream):
                     async with ClientSession(
-                        read_stream, write_stream, **sampling_kwargs
+                        read_stream, _OmitEmptyMcpMetaWriteStream(write_stream), **sampling_kwargs
                     ) as session:
                         # Bound the handshake — same orphaned-task hang as the
                         # stdio path (#59349): an endpoint that accepts the
@@ -3548,7 +3635,9 @@ class MCPServerTask:
                     # and get_session_id was never used here.
                     async with streamable_http_client(url, http_client=http_client) as _streams:
                         read_stream, write_stream = _streams[0], _streams[1]
-                        async with ClientSession(read_stream, write_stream, **sampling_kwargs) as session:
+                        async with ClientSession(
+                            read_stream, _OmitEmptyMcpMetaWriteStream(write_stream), **sampling_kwargs
+                        ) as session:
                             # Bound the handshake (#59349) — see stdio path.
                             self.initialize_result = await self._negotiate_session(
                                 session, float(connect_timeout)
@@ -3595,7 +3684,9 @@ class MCPServerTask:
                 async with streamablehttp_client(url, **_http_kwargs) as (
                     read_stream, write_stream, _get_session_id,
                 ):
-                    async with ClientSession(read_stream, write_stream, **sampling_kwargs) as session:
+                    async with ClientSession(
+                        read_stream, _OmitEmptyMcpMetaWriteStream(write_stream), **sampling_kwargs
+                    ) as session:
                         # Bound the handshake (#59349) — see stdio path.
                         self.initialize_result = await self._negotiate_session(
                             session, float(connect_timeout)

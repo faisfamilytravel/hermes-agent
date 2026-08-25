@@ -14,7 +14,13 @@ import time
 
 
 from agent.redact import redact_sensitive_text
-from agent.secret_scope import get_secret
+from agent.secret_scope import (
+    build_profile_secret_scope,
+    get_secret,
+    reset_secret_scope,
+    set_secret_scope,
+)
+from hermes_cli.config import get_hermes_home
 
 logger = logging.getLogger(__name__)
 
@@ -385,11 +391,19 @@ def _handle_send(args):
     if is_interrupted():
         return tool_error("Interrupted")
 
+    # Standalone sends execute outside the gateway's multiplexed profile scope.
+    # Install the invoking profile's scope while loading config so review
+    # delivery receives the same profile-local Telegram secret as the gateway.
+    _scope_token = None
     try:
+        _scope_token = set_secret_scope(build_profile_secret_scope(get_hermes_home()))
         from gateway.config import load_gateway_config, Platform
         config = load_gateway_config()
     except Exception as e:
         return json.dumps(_error(f"Failed to load gateway config: {e}"))
+    finally:
+        if _scope_token is not None:
+            reset_secret_scope(_scope_token)
 
     from gateway.platform_registry import platform_registry
 

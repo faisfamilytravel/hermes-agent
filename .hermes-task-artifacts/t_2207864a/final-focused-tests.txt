@@ -1,0 +1,15 @@
+▶ running per-file parallel test suite via run_tests_parallel.py
+  (TZ=UTC LANG=C.UTF-8 PYTHONHASHSEED=0; clean env)
+Discovered 1 test files (15 tests) under ['tests/hermes_cli/test_execution_provenance.py', 'tests/hermes_cli/test_main.py']; running with -j 36
+[100.0% |    15/15 | ✓15 | ✗ 0] ✓ tests/hermes_cli/test_execution_provenance.py (15✓, 0.7s)
+
+=== Summary: 1 files, 15 tests passed, 0 failed (100% complete) in 0.7s (36 workers) ===
+  Durations cached to test_durations.json (1 files)
+
+=== Per-file subprocess time distribution ===
+  Files:   1
+  Total subprocess CPU-wall: 0.7s  (runner wall: 0.7s, parallelism: 36x)
+  P50: 0.66s  P90: 0.66s  P95: 0.66s  P99: 0.66s  Max: 0.66s
+  <1s: 1 files (100%)  <2s: 1 files (100%)
+  Top 10 slowest:
+      0.66s  tests/hermes_cli/test_execution_provenance.py

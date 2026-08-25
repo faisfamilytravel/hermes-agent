@@ -122,7 +122,8 @@ def test_the_session_streams_are_the_first_two_yielded():
 
     asyncio.run(_drive())
 
-    assert passed["args"][:2] == (read, write)
+    assert passed["args"][0] is read
+    assert passed["args"][1]._stream is write
 
 
 def test_the_seeded_protocol_header_matches_the_handshake_the_client_sends():
@@ -212,3 +213,74 @@ def test_an_explicit_protocol_header_still_wins():
 
     headers = {k.lower(): v for k, v in (seen.get("headers") or {}).items()}
     assert headers.get("mcp-protocol-version") == "2025-06-18"
+
+
+def test_sdk2_legacy_initialize_omits_an_empty_meta_envelope():
+    """Hosted legacy servers must not receive SDK 2.x's default ``_meta: {}``.
+
+    The SDK 2.x request model serializes an empty envelope by default. Meta's
+    legacy Ads MCP rejects that shape during initialize, while the same request
+    with the field absent completes normally. Keep the compatibility serializer
+    at the protocol seam so configurations do not need vendor-specific changes.
+    """
+    try:
+        import mcp_types as types
+    except ImportError:
+        pytest.skip("SDK 2.x request models are unavailable")
+
+    from types import SimpleNamespace
+    from tools.mcp_tool import MCPServerTask, LATEST_HANDSHAKE_VERSION
+
+    seen: dict = {}
+
+    class _Sdk2Session:
+        _client_info = types.Implementation(name="test", version="1")
+
+        def _build_capabilities(self, _version):
+            return types.ClientCapabilities()
+
+        async def send_request(self, request, _result_type):
+            seen["request"] = request.model_dump(
+                by_alias=True, mode="json", exclude_unset=True
+            )
+            return SimpleNamespace(protocol_version=LATEST_HANDSHAKE_VERSION)
+
+        def adopt(self, result):
+            seen["adopted"] = result
+
+        async def send_notification(self, notification):
+            seen["notification"] = notification
+
+    asyncio.run(MCPServerTask("remote")._initialize_legacy_session(_Sdk2Session()))
+
+    assert "_meta" not in seen["request"]["params"]
+    assert seen["adopted"].protocol_version == LATEST_HANDSHAKE_VERSION
+    assert isinstance(seen["notification"], types.InitializedNotification)
+
+
+def test_sdk2_legacy_initialize_omits_meta_on_the_real_session_wire_path():
+    """Cover ``ClientSession.send_request``, not only a test double."""
+    try:
+        from mcp.client.session import ClientSession
+    except ImportError:
+        pytest.skip("SDK 2.x ClientSession is unavailable")
+
+    from tools.mcp_tool import MCPServerTask
+
+    seen: dict = {}
+
+    class _Dispatcher:
+        async def send_raw_request(self, method, params, _opts):
+            seen["method"] = method
+            seen["params"] = params
+            raise RuntimeError("stop after request capture")
+
+    with pytest.raises(RuntimeError, match="stop after request capture"):
+        asyncio.run(
+            MCPServerTask("remote")._initialize_legacy_session(
+                ClientSession(dispatcher=_Dispatcher())
+            )
+        )
+
+    assert seen["method"] == "initialize"
+    assert "_meta" not in seen["params"]

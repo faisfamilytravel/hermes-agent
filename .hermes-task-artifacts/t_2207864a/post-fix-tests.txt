@@ -1,0 +1,95 @@
+▶ running per-file parallel test suite via run_tests_parallel.py
+  (TZ=UTC LANG=C.UTF-8 PYTHONHASHSEED=0; clean env)
+Discovered 1 test files (15 tests) under ['tests/hermes_cli/test_execution_provenance.py']; running with -j 36
+[100.0% |    15/15 | ✓14 | ✗ 1] ✗ tests/hermes_cli/test_execution_provenance.py (14✓ 1✗, 0.5s)
+
+  ╔╍ Failed: tests/hermes_cli/test_execution_provenance.py ╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍
+  ║ 
+  ║ tests/hermes_cli/test_execution_provenance.py F..............            [100%]
+  ║ 
+  ║ =================================== FAILURES ===================================
+  ║ __________________ test_exact_commander_exception_is_recorded __________________
+  ║ 
+  ║ tmp_path = PosixPath('/private/tmp/pytest-of-rfais370/pytest-24/test_exact_commander_exception0')
+  ║ 
+  ║     def test_exact_commander_exception_is_recorded(tmp_path):
+  ║         ledger = tmp_path / "executions.jsonl"
+  ║         record = authorize_profile_execution(
+  ║             source="csm", target="s6",
+  ║             argv=["hermes", "-p", "s6", "chat", "-q", "work"],
+  ║             authority_json=json.dumps(_authority()), ledger_path=ledger, pid=os.getpid(),
+  ║         )
+  ║         assert record["authority_class"] == "commander_direct"
+  ║         assert record["authority_reference"] == "DEC-TEST-001"
+  ║         assert record["source"] == "csm"
+  ║         assert record["target"] == "s6"
+  ║ >       assert record["execution_path"] == "hermes -p s6 chat -q [REDACTED]"
+  ║ E       assert "hermes -p s6... '[REDACTED]'" == 'hermes -p s6...-q [REDACTED]'
+  ║ E         
+  ║ E         - hermes -p s6 chat -q [REDACTED]
+  ║ E         + hermes -p s6 chat -q '[REDACTED]'
+  ║ E         ?                      +          +
+  ║ 
+  ║ tests/hermes_cli/test_execution_provenance.py:69: AssertionError
+  ║ =========================== short test summary info ============================
+  ║ FAILED tests/hermes_cli/test_execution_provenance.py::test_exact_commander_exception_is_recorded
+  ║ ========================= 1 failed, 14 passed in 0.37s =========================
+  ║
+  ║  Repro: python -m pytest tests/hermes_cli/test_execution_provenance.py
+  ╚╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍
+
+
+=== Summary: 1 files, 14 tests passed, 1 failed (100% complete) in 0.5s (36 workers) ===
+  Durations cached to test_durations.json (1 files)
+
+=== Per-file subprocess time distribution ===
+  Files:   1
+  Total subprocess CPU-wall: 0.5s  (runner wall: 0.5s, parallelism: 36x)
+  P50: 0.51s  P90: 0.51s  P95: 0.51s  P99: 0.51s  Max: 0.51s
+  <1s: 1 files (100%)  <2s: 1 files (100%)
+  Top 10 slowest:
+      0.51s  tests/hermes_cli/test_execution_provenance.py
+
+=== Failure output ===
+
+--- tests/hermes_cli/test_execution_provenance.py ---
+============================= test session starts ==============================
+platform darwin -- Python 3.11.15, pytest-9.0.2, pluggy-1.6.0
+rootdir: /Users/rfais370/.hermes/hermes-agent
+configfile: pyproject.toml
+plugins: anyio-4.12.1, asyncio-1.3.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 15 items
+
+tests/hermes_cli/test_execution_provenance.py F..............            [100%]
+
+=================================== FAILURES ===================================
+__________________ test_exact_commander_exception_is_recorded __________________
+
+tmp_path = PosixPath('/private/tmp/pytest-of-rfais370/pytest-24/test_exact_commander_exception0')
+
+    def test_exact_commander_exception_is_recorded(tmp_path):
+        ledger = tmp_path / "executions.jsonl"
+        record = authorize_profile_execution(
+            source="csm", target="s6",
+            argv=["hermes", "-p", "s6", "chat", "-q", "work"],
+            authority_json=json.dumps(_authority()), ledger_path=ledger, pid=os.getpid(),
+        )
+        assert record["authority_class"] == "commander_direct"
+        assert record["authority_reference"] == "DEC-TEST-001"
+        assert record["source"] == "csm"
+        assert record["target"] == "s6"
+>       assert record["execution_path"] == "hermes -p s6 chat -q [REDACTED]"
+E       assert "hermes -p s6... '[REDACTED]'" == 'hermes -p s6...-q [REDACTED]'
+E         
+E         - hermes -p s6 chat -q [REDACTED]
+E         + hermes -p s6 chat -q '[REDACTED]'
+E         ?                      +          +
+
+tests/hermes_cli/test_execution_provenance.py:69: AssertionError
+=========================== short test summary info ============================
+FAILED tests/hermes_cli/test_execution_provenance.py::test_exact_commander_exception_is_recorded
+========================= 1 failed, 14 passed in 0.37s =========================
+
+=== 1 file with test failures (1 test failed) ===
+  tests/hermes_cli/test_execution_provenance.py  (1 test failed)

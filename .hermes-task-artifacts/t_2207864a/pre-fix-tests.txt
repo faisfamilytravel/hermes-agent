@@ -1,0 +1,284 @@
+▶ running per-file parallel test suite via run_tests_parallel.py
+  (TZ=UTC LANG=C.UTF-8 PYTHONHASHSEED=0; clean env)
+Discovered 1 test files (15 tests) under ['tests/hermes_cli/test_execution_provenance.py']; running with -j 36
+[100.0% |    15/15 | ✓ 5 | ✗10] ✗ tests/hermes_cli/test_execution_provenance.py (5✓ 10✗, 0.5s)
+
+  ╔╍ Failed: tests/hermes_cli/test_execution_provenance.py ╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍
+  ║ _________________ test_prompt_payload_is_redacted_from_ledger __________________
+  ║ 
+  ║ tmp_path = PosixPath('/private/tmp/pytest-of-rfais370/pytest-23/test_prompt_payload_is_redacte0')
+  ║ 
+  ║     def test_prompt_payload_is_redacted_from_ledger(tmp_path):
+  ║         ledger = tmp_path / "ledger.jsonl"
+  ║         record = authorize_profile_execution(
+  ║             source="csm", target="s6",
+  ║             argv=["hermes", "-p", "s6", "chat", "-q", "TOP SECRET BODY"],
+  ║             authority_json=json.dumps(_authority()), ledger_path=ledger)
+  ║ >       assert "TOP SECRET BODY" not in record["execution_path"]
+  ║ E       assert 'TOP SECRET BODY' not in "hermes -p s...SECRET BODY'"
+  ║ E         
+  ║ E         'TOP SECRET BODY' is contained here:
+  ║ E           hermes -p s6 chat -q 'TOP SECRET BODY'
+  ║ E         ?                       +++++++++++++++
+  ║ 
+  ║ tests/hermes_cli/test_execution_provenance.py:183: AssertionError
+  ║ =========================== short test summary info ============================
+  ║ FAILED tests/hermes_cli/test_execution_provenance.py::test_exact_commander_exception_is_recorded
+  ║ FAILED tests/hermes_cli/test_execution_provenance.py::test_kanban_dispatch_is_allowed_and_visible
+  ║ FAILED tests/hermes_cli/test_execution_provenance.py::test_forged_or_inherited_kanban_custody_is_rejected[csm-s6-9-claim-1]
+  ║ FAILED tests/hermes_cli/test_execution_provenance.py::test_forged_or_inherited_kanban_custody_is_rejected[mission-ctrl-s7-9-claim-1]
+  ║ FAILED tests/hermes_cli/test_execution_provenance.py::test_forged_or_inherited_kanban_custody_is_rejected[mission-ctrl-s6-8-claim-1]
+  ║ FAILED tests/hermes_cli/test_execution_provenance.py::test_forged_or_inherited_kanban_custody_is_rejected[mission-ctrl-s6-9-wrong]
+  ║ FAILED tests/hermes_cli/test_execution_provenance.py::test_missing_kanban_database_fails_closed
+  ║ FAILED tests/hermes_cli/test_execution_provenance.py::test_external_noninteractive_rejects_but_human_interactive_is_intentional
+  ║ FAILED tests/hermes_cli/test_execution_provenance.py::test_commander_execution_id_is_consumed_atomically
+  ║ FAILED tests/hermes_cli/test_execution_provenance.py::test_prompt_payload_is_redacted_from_ledger
+  ║ ========================= 10 failed, 5 passed in 0.40s =========================
+  ║
+  ║  Repro: python -m pytest tests/hermes_cli/test_execution_provenance.py
+  ╚╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍
+
+
+=== Summary: 1 files, 5 tests passed, 10 failed (100% complete) in 0.5s (36 workers) ===
+  Durations cached to test_durations.json (1 files)
+
+=== Per-file subprocess time distribution ===
+  Files:   1
+  Total subprocess CPU-wall: 0.5s  (runner wall: 0.5s, parallelism: 36x)
+  P50: 0.52s  P90: 0.52s  P95: 0.52s  P99: 0.52s  Max: 0.52s
+  <1s: 1 files (100%)  <2s: 1 files (100%)
+  Top 10 slowest:
+      0.52s  tests/hermes_cli/test_execution_provenance.py
+
+=== Failure output ===
+
+--- tests/hermes_cli/test_execution_provenance.py ---
+============================= test session starts ==============================
+platform darwin -- Python 3.11.15, pytest-9.0.2, pluggy-1.6.0
+rootdir: /Users/rfais370/.hermes/hermes-agent
+configfile: pyproject.toml
+plugins: anyio-4.12.1, asyncio-1.3.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 15 items
+
+tests/hermes_cli/test_execution_provenance.py F..FFFFFFFFF...            [100%]
+
+=================================== FAILURES ===================================
+__________________ test_exact_commander_exception_is_recorded __________________
+
+tmp_path = PosixPath('/private/tmp/pytest-of-rfais370/pytest-23/test_exact_commander_exception0')
+
+    def test_exact_commander_exception_is_recorded(tmp_path):
+        ledger = tmp_path / "executions.jsonl"
+        record = authorize_profile_execution(
+            source="csm", target="s6",
+            argv=["hermes", "-p", "s6", "chat", "-q", "work"],
+            authority_json=json.dumps(_authority()), ledger_path=ledger, pid=os.getpid(),
+        )
+        assert record["authority_class"] == "commander_direct"
+        assert record["authority_reference"] == "DEC-TEST-001"
+        assert record["source"] == "csm"
+        assert record["target"] == "s6"
+>       assert record["execution_path"] == "hermes -p s6 chat -q [REDACTED]"
+E       AssertionError: assert 'hermes -p s6 chat -q work' == 'hermes -p s6...-q [REDACTED]'
+E         
+E         - hermes -p s6 chat -q [REDACTED]
+E         ?                      ^^^^^^^^^^
+E         + hermes -p s6 chat -q work
+E         ?                      ^^^^
+
+tests/hermes_cli/test_execution_provenance.py:69: AssertionError
+_________________ test_kanban_dispatch_is_allowed_and_visible __________________
+
+tmp_path = PosixPath('/private/tmp/pytest-of-rfais370/pytest-23/test_kanban_dispatch_is_allowe0')
+
+    def test_kanban_dispatch_is_allowed_and_visible(tmp_path):
+        ledger = tmp_path / "executions.jsonl"
+>       record = authorize_profile_execution(
+            source="mission-ctrl", target="s6",
+            argv=["hermes", "-p", "s6", "chat", "-q", "work kanban task t_1"],
+            authority_json=None, ledger_path=ledger, kanban_task="t_1",
+            kanban_run="9", kanban_claim_lock="claim-1",
+            kanban_db_path=_kanban_db(tmp_path / "kanban.db"),
+        )
+E       TypeError: authorize_profile_execution() got an unexpected keyword argument 'kanban_db_path'
+
+tests/hermes_cli/test_execution_provenance.py:102: TypeError
+____ test_forged_or_inherited_kanban_custody_is_rejected[csm-s6-9-claim-1] _____
+
+tmp_path = PosixPath('/private/tmp/pytest-of-rfais370/pytest-23/test_forged_or_inherited_kanba0')
+source = 'csm', target = 's6', run = '9', claim = 'claim-1'
+
+    @pytest.mark.parametrize("source,target,run,claim", [
+        ("csm", "s6", "9", "claim-1"),
+        ("mission-ctrl", "s7", "9", "claim-1"),
+        ("mission-ctrl", "s6", "8", "claim-1"),
+        ("mission-ctrl", "s6", "9", "wrong"),
+    ])
+    def test_forged_or_inherited_kanban_custody_is_rejected(tmp_path, source, target, run, claim):
+        with pytest.raises(ExecutionAuthorityError):
+>           authorize_profile_execution(
+                source=source, target=target,
+                argv=["hermes", "-p", target, "chat", "-q", "work"],
+                authority_json=None, ledger_path=tmp_path / "ledger.jsonl",
+                kanban_task="t_1", kanban_run=run, kanban_claim_lock=claim,
+                kanban_db_path=_kanban_db(tmp_path / "kanban.db"),
+            )
+E           TypeError: authorize_profile_execution() got an unexpected keyword argument 'kanban_db_path'
+
+tests/hermes_cli/test_execution_provenance.py:122: TypeError
+_ test_forged_or_inherited_kanban_custody_is_rejected[mission-ctrl-s7-9-claim-1] _
+
+tmp_path = PosixPath('/private/tmp/pytest-of-rfais370/pytest-23/test_forged_or_inherited_kanba1')
+source = 'mission-ctrl', target = 's7', run = '9', claim = 'claim-1'
+
+    @pytest.mark.parametrize("source,target,run,claim", [
+        ("csm", "s6", "9", "claim-1"),
+        ("mission-ctrl", "s7", "9", "claim-1"),
+        ("mission-ctrl", "s6", "8", "claim-1"),
+        ("mission-ctrl", "s6", "9", "wrong"),
+    ])
+    def test_forged_or_inherited_kanban_custody_is_rejected(tmp_path, source, target, run, claim):
+        with pytest.raises(ExecutionAuthorityError):
+>           authorize_profile_execution(
+                source=source, target=target,
+                argv=["hermes", "-p", target, "chat", "-q", "work"],
+                authority_json=None, ledger_path=tmp_path / "ledger.jsonl",
+                kanban_task="t_1", kanban_run=run, kanban_claim_lock=claim,
+                kanban_db_path=_kanban_db(tmp_path / "kanban.db"),
+            )
+E           TypeError: authorize_profile_execution() got an unexpected keyword argument 'kanban_db_path'
+
+tests/hermes_cli/test_execution_provenance.py:122: TypeError
+_ test_forged_or_inherited_kanban_custody_is_rejected[mission-ctrl-s6-8-claim-1] _
+
+tmp_path = PosixPath('/private/tmp/pytest-of-rfais370/pytest-23/test_forged_or_inherited_kanba2')
+source = 'mission-ctrl', target = 's6', run = '8', claim = 'claim-1'
+
+    @pytest.mark.parametrize("source,target,run,claim", [
+        ("csm", "s6", "9", "claim-1"),
+        ("mission-ctrl", "s7", "9", "claim-1"),
+        ("mission-ctrl", "s6", "8", "claim-1"),
+        ("mission-ctrl", "s6", "9", "wrong"),
+    ])
+    def test_forged_or_inherited_kanban_custody_is_rejected(tmp_path, source, target, run, claim):
+        with pytest.raises(ExecutionAuthorityError):
+>           authorize_profile_execution(
+                source=source, target=target,
+                argv=["hermes", "-p", target, "chat", "-q", "work"],
+                authority_json=None, ledger_path=tmp_path / "ledger.jsonl",
+                kanban_task="t_1", kanban_run=run, kanban_claim_lock=claim,
+                kanban_db_path=_kanban_db(tmp_path / "kanban.db"),
+            )
+E           TypeError: authorize_profile_execution() got an unexpected keyword argument 'kanban_db_path'
+
+tests/hermes_cli/test_execution_provenance.py:122: TypeError
+_ test_forged_or_inherited_kanban_custody_is_rejected[mission-ctrl-s6-9-wrong] _
+
+tmp_path = PosixPath('/private/tmp/pytest-of-rfais370/pytest-23/test_forged_or_inherited_kanba3')
+source = 'mission-ctrl', target = 's6', run = '9', claim = 'wrong'
+
+    @pytest.mark.parametrize("source,target,run,claim", [
+        ("csm", "s6", "9", "claim-1"),
+        ("mission-ctrl", "s7", "9", "claim-1"),
+        ("mission-ctrl", "s6", "8", "claim-1"),
+        ("mission-ctrl", "s6", "9", "wrong"),
+    ])
+    def test_forged_or_inherited_kanban_custody_is_rejected(tmp_path, source, target, run, claim):
+        with pytest.raises(ExecutionAuthorityError):
+>           authorize_profile_execution(
+                source=source, target=target,
+                argv=["hermes", "-p", target, "chat", "-q", "work"],
+                authority_json=None, ledger_path=tmp_path / "ledger.jsonl",
+                kanban_task="t_1", kanban_run=run, kanban_claim_lock=claim,
+                kanban_db_path=_kanban_db(tmp_path / "kanban.db"),
+            )
+E           TypeError: authorize_profile_execution() got an unexpected keyword argument 'kanban_db_path'
+
+tests/hermes_cli/test_execution_provenance.py:122: TypeError
+__________________ test_missing_kanban_database_fails_closed ___________________
+
+tmp_path = PosixPath('/private/tmp/pytest-of-rfais370/pytest-23/test_missing_kanban_database_f0')
+
+    def test_missing_kanban_database_fails_closed(tmp_path):
+        with pytest.raises(ExecutionAuthorityError, match="Kanban custody"):
+>           authorize_profile_execution(
+                source="mission-ctrl", target="s6", argv=["hermes", "-p", "s6", "chat", "-q", "work"],
+                authority_json=None, ledger_path=tmp_path / "ledger.jsonl",
+                kanban_task="t_1", kanban_run="9", kanban_claim_lock="claim-1",
+                kanban_db_path=tmp_path / "missing.db",
+            )
+E           TypeError: authorize_profile_execution() got an unexpected keyword argument 'kanban_db_path'
+
+tests/hermes_cli/test_execution_provenance.py:133: TypeError
+__ test_external_noninteractive_rejects_but_human_interactive_is_intentional ___
+
+tmp_path = PosixPath('/private/tmp/pytest-of-rfais370/pytest-23/test_external_noninteractive_r0')
+
+    def test_external_noninteractive_rejects_but_human_interactive_is_intentional(tmp_path):
+>       with pytest.raises(ExecutionAuthorityError, match="structured authority"):
+E       Failed: DID NOT RAISE <class 'hermes_cli.execution_provenance.ExecutionAuthorityError'>
+
+tests/hermes_cli/test_execution_provenance.py:142: Failed
+______________ test_commander_execution_id_is_consumed_atomically ______________
+
+tmp_path = PosixPath('/private/tmp/pytest-of-rfais370/pytest-23/test_commander_execution_id_is0')
+
+    def test_commander_execution_id_is_consumed_atomically(tmp_path):
+        ledger = tmp_path / "ledger.jsonl"
+        payload = json.dumps(_authority())
+        barrier = threading.Barrier(16)
+        accepted = []
+    
+        def attempt():
+            barrier.wait()
+            try:
+                authorize_profile_execution(source="csm", target="s6", argv=["hermes", "chat"],
+                    authority_json=payload, ledger_path=ledger)
+                accepted.append(True)
+            except ExecutionAuthorityError:
+                pass
+    
+        threads = [threading.Thread(target=attempt) for _ in range(16)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+>       assert len(accepted) == 1
+E       assert 2 == 1
+E        +  where 2 = len([True, True])
+
+tests/hermes_cli/test_execution_provenance.py:172: AssertionError
+_________________ test_prompt_payload_is_redacted_from_ledger __________________
+
+tmp_path = PosixPath('/private/tmp/pytest-of-rfais370/pytest-23/test_prompt_payload_is_redacte0')
+
+    def test_prompt_payload_is_redacted_from_ledger(tmp_path):
+        ledger = tmp_path / "ledger.jsonl"
+        record = authorize_profile_execution(
+            source="csm", target="s6",
+            argv=["hermes", "-p", "s6", "chat", "-q", "TOP SECRET BODY"],
+            authority_json=json.dumps(_authority()), ledger_path=ledger)
+>       assert "TOP SECRET BODY" not in record["execution_path"]
+E       assert 'TOP SECRET BODY' not in "hermes -p s...SECRET BODY'"
+E         
+E         'TOP SECRET BODY' is contained here:
+E           hermes -p s6 chat -q 'TOP SECRET BODY'
+E         ?                       +++++++++++++++
+
+tests/hermes_cli/test_execution_provenance.py:183: AssertionError
+=========================== short test summary info ============================
+FAILED tests/hermes_cli/test_execution_provenance.py::test_exact_commander_exception_is_recorded
+FAILED tests/hermes_cli/test_execution_provenance.py::test_kanban_dispatch_is_allowed_and_visible
+FAILED tests/hermes_cli/test_execution_provenance.py::test_forged_or_inherited_kanban_custody_is_rejected[csm-s6-9-claim-1]
+FAILED tests/hermes_cli/test_execution_provenance.py::test_forged_or_inherited_kanban_custody_is_rejected[mission-ctrl-s7-9-claim-1]
+FAILED tests/hermes_cli/test_execution_provenance.py::test_forged_or_inherited_kanban_custody_is_rejected[mission-ctrl-s6-8-claim-1]
+FAILED tests/hermes_cli/test_execution_provenance.py::test_forged_or_inherited_kanban_custody_is_rejected[mission-ctrl-s6-9-wrong]
+FAILED tests/hermes_cli/test_execution_provenance.py::test_missing_kanban_database_fails_closed
+FAILED tests/hermes_cli/test_execution_provenance.py::test_external_noninteractive_rejects_but_human_interactive_is_intentional
+FAILED tests/hermes_cli/test_execution_provenance.py::test_commander_execution_id_is_consumed_atomically
+FAILED tests/hermes_cli/test_execution_provenance.py::test_prompt_payload_is_redacted_from_ledger
+========================= 10 failed, 5 passed in 0.40s =========================
+
+=== 1 file with test failures (10 tests failed) ===
+  tests/hermes_cli/test_execution_provenance.py  (10 tests failed)
