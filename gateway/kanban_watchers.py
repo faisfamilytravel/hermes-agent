@@ -597,6 +597,15 @@ class GatewayKanbanWatchersMixin:
                                 f" — {title}{handoff}"
                             )
                         elif kind == "block_loop_detected":
+                            # TRIAGE is a staff workflow state, not itself a
+                            # Commander decision. Only an explicit
+                            # ``needs_input`` loop carries the human-decision
+                            # signal; transient, dependency, and capability
+                            # loops must remain internal. ``continue`` keeps
+                            # the event claimed, so this silent staff event
+                            # cannot wedge later subscriber notifications.
+                            if not ev.payload or ev.payload.get("kind") != "needs_input":
+                                continue
                             # A task re-blocked for the same cause past the
                             # recurrence limit and was routed to `triage` for a
                             # human decision. This is the ONE transition that

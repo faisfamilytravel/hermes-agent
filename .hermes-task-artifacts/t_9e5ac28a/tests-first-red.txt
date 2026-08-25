@@ -1,0 +1,344 @@
+▶ running per-file parallel test suite via run_tests_parallel.py
+  (TZ=UTC LANG=C.UTF-8 PYTHONHASHSEED=0; clean env)
+Discovered 2 test files (48 tests) under ['tests/hermes_cli/test_execution_provenance.py', 'tests/hermes_cli/test_apply_profile_override.py']; running with -j 36
+[ 29.2% |    14/48 | ✓14 | ✗ 0] ✓ tests/hermes_cli/test_apply_profile_override.py (14✓, 0.7s)
+[100.0% |    48/48 | ✓38 | ✗10] ✗ tests/hermes_cli/test_execution_provenance.py (24✓ 10✗, 1.2s)
+
+  ╔╍ Failed: tests/hermes_cli/test_execution_provenance.py ╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍
+  ║     @pytest.mark.parametrize("form", ["separate", "equals"])
+  ║     def test_explicit_sensitive_options_are_redacted_in_both_forms(option, form):
+  ║         secret = f"SENTINEL-{option[2:].upper()}-SECRET"
+  ║         argv = (
+  ║             ["hermes", "chat", option, secret]
+  ║             if form == "separate"
+  ║             else ["hermes", "chat", f"{option}={secret}"]
+  ║         )
+  ║     
+  ║         execution_path = _redacted_execution_path(argv)
+  ║     
+  ║ >       assert secret not in execution_path
+  ║ E       AssertionError: assert 'SENTINEL-SY...ROMPT-SECRET' not in 'hermes chat...ROMPT-SECRET'
+  ║ E         
+  ║ E         'SENTINEL-SYSTEM-PROMPT-SECRET' is contained here:
+  ║ E           hermes chat --system-prompt=SENTINEL-SYSTEM-PROMPT-SECRET
+  ║ 
+  ║ tests/hermes_cli/test_execution_provenance.py:221: AssertionError
+  ║ =========================== short test summary info ============================
+  ║ FAILED tests/hermes_cli/test_execution_provenance.py::test_explicit_sensitive_options_are_redacted_in_both_forms[separate---body]
+  ║ FAILED tests/hermes_cli/test_execution_provenance.py::test_explicit_sensitive_options_are_redacted_in_both_forms[separate---message]
+  ║ FAILED tests/hermes_cli/test_execution_provenance.py::test_explicit_sensitive_options_are_redacted_in_both_forms[separate---content]
+  ║ FAILED tests/hermes_cli/test_execution_provenance.py::test_explicit_sensitive_options_are_redacted_in_both_forms[separate---authority]
+  ║ FAILED tests/hermes_cli/test_execution_provenance.py::test_explicit_sensitive_options_are_redacted_in_both_forms[separate---system-prompt]
+  ║ FAILED tests/hermes_cli/test_execution_provenance.py::test_explicit_sensitive_options_are_redacted_in_both_forms[equals---body]
+  ║ FAILED tests/hermes_cli/test_execution_provenance.py::test_explicit_sensitive_options_are_redacted_in_both_forms[equals---message]
+  ║ FAILED tests/hermes_cli/test_execution_provenance.py::test_explicit_sensitive_options_are_redacted_in_both_forms[equals---content]
+  ║ FAILED tests/hermes_cli/test_execution_provenance.py::test_explicit_sensitive_options_are_redacted_in_both_forms[equals---authority]
+  ║ FAILED tests/hermes_cli/test_execution_provenance.py::test_explicit_sensitive_options_are_redacted_in_both_forms[equals---system-prompt]
+  ║ ======================== 10 failed, 24 passed in 1.05s =========================
+  ║
+  ║  Repro: python -m pytest tests/hermes_cli/test_execution_provenance.py
+  ╚╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍
+
+
+=== Summary: 2 files, 38 tests passed, 10 failed (100% complete) in 1.2s (36 workers) ===
+  Durations cached to test_durations.json (2 files)
+
+=== Per-file subprocess time distribution ===
+  Files:   2
+  Total subprocess CPU-wall: 1.9s  (runner wall: 1.2s, parallelism: 36x)
+  P50: 1.16s  P90: 1.16s  P95: 1.16s  P99: 1.16s  Max: 1.16s
+  <1s: 1 files (50%)  <2s: 2 files (100%)
+  Top 10 slowest:
+      1.16s  tests/hermes_cli/test_execution_provenance.py
+      0.75s  tests/hermes_cli/test_apply_profile_override.py
+
+=== Failure output ===
+
+--- tests/hermes_cli/test_execution_provenance.py ---
+============================= test session starts ==============================
+platform darwin -- Python 3.11.15, pytest-9.0.2, pluggy-1.6.0
+rootdir: /Users/rfais370/.hermes/hermes-agent
+configfile: pyproject.toml
+plugins: anyio-4.12.1, asyncio-1.3.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 34 items
+
+tests/hermes_cli/test_execution_provenance.py ....................FFFFFF [ 76%]
+FFFF....                                                                 [100%]
+
+=================================== FAILURES ===================================
+_ test_explicit_sensitive_options_are_redacted_in_both_forms[separate---body] __
+
+option = '--body', form = 'separate'
+
+    @pytest.mark.parametrize(
+        "option",
+        ["--body", "--message", "--content", "--authority", "--system-prompt"],
+    )
+    @pytest.mark.parametrize("form", ["separate", "equals"])
+    def test_explicit_sensitive_options_are_redacted_in_both_forms(option, form):
+        secret = f"SENTINEL-{option[2:].upper()}-SECRET"
+        argv = (
+            ["hermes", "chat", option, secret]
+            if form == "separate"
+            else ["hermes", "chat", f"{option}={secret}"]
+        )
+    
+        execution_path = _redacted_execution_path(argv)
+    
+>       assert secret not in execution_path
+E       AssertionError: assert 'SENTINEL-BODY-SECRET' not in 'hermes chat...-BODY-SECRET'
+E         
+E         'SENTINEL-BODY-SECRET' is contained here:
+E           hermes chat --body SENTINEL-BODY-SECRET
+
+tests/hermes_cli/test_execution_provenance.py:221: AssertionError
+_ test_explicit_sensitive_options_are_redacted_in_both_forms[separate---message] _
+
+option = '--message', form = 'separate'
+
+    @pytest.mark.parametrize(
+        "option",
+        ["--body", "--message", "--content", "--authority", "--system-prompt"],
+    )
+    @pytest.mark.parametrize("form", ["separate", "equals"])
+    def test_explicit_sensitive_options_are_redacted_in_both_forms(option, form):
+        secret = f"SENTINEL-{option[2:].upper()}-SECRET"
+        argv = (
+            ["hermes", "chat", option, secret]
+            if form == "separate"
+            else ["hermes", "chat", f"{option}={secret}"]
+        )
+    
+        execution_path = _redacted_execution_path(argv)
+    
+>       assert secret not in execution_path
+E       AssertionError: assert 'SENTINEL-MESSAGE-SECRET' not in 'hermes chat...SSAGE-SECRET'
+E         
+E         'SENTINEL-MESSAGE-SECRET' is contained here:
+E           hermes chat --message SENTINEL-MESSAGE-SECRET
+
+tests/hermes_cli/test_execution_provenance.py:221: AssertionError
+_ test_explicit_sensitive_options_are_redacted_in_both_forms[separate---content] _
+
+option = '--content', form = 'separate'
+
+    @pytest.mark.parametrize(
+        "option",
+        ["--body", "--message", "--content", "--authority", "--system-prompt"],
+    )
+    @pytest.mark.parametrize("form", ["separate", "equals"])
+    def test_explicit_sensitive_options_are_redacted_in_both_forms(option, form):
+        secret = f"SENTINEL-{option[2:].upper()}-SECRET"
+        argv = (
+            ["hermes", "chat", option, secret]
+            if form == "separate"
+            else ["hermes", "chat", f"{option}={secret}"]
+        )
+    
+        execution_path = _redacted_execution_path(argv)
+    
+>       assert secret not in execution_path
+E       AssertionError: assert 'SENTINEL-CONTENT-SECRET' not in 'hermes chat...NTENT-SECRET'
+E         
+E         'SENTINEL-CONTENT-SECRET' is contained here:
+E           hermes chat --content SENTINEL-CONTENT-SECRET
+
+tests/hermes_cli/test_execution_provenance.py:221: AssertionError
+_ test_explicit_sensitive_options_are_redacted_in_both_forms[separate---authority] _
+
+option = '--authority', form = 'separate'
+
+    @pytest.mark.parametrize(
+        "option",
+        ["--body", "--message", "--content", "--authority", "--system-prompt"],
+    )
+    @pytest.mark.parametrize("form", ["separate", "equals"])
+    def test_explicit_sensitive_options_are_redacted_in_both_forms(option, form):
+        secret = f"SENTINEL-{option[2:].upper()}-SECRET"
+        argv = (
+            ["hermes", "chat", option, secret]
+            if form == "separate"
+            else ["hermes", "chat", f"{option}={secret}"]
+        )
+    
+        execution_path = _redacted_execution_path(argv)
+    
+>       assert secret not in execution_path
+E       AssertionError: assert 'SENTINEL-AUTHORITY-SECRET' not in 'hermes chat...ORITY-SECRET'
+E         
+E         'SENTINEL-AUTHORITY-SECRET' is contained here:
+E           hermes chat --authority SENTINEL-AUTHORITY-SECRET
+
+tests/hermes_cli/test_execution_provenance.py:221: AssertionError
+_ test_explicit_sensitive_options_are_redacted_in_both_forms[separate---system-prompt] _
+
+option = '--system-prompt', form = 'separate'
+
+    @pytest.mark.parametrize(
+        "option",
+        ["--body", "--message", "--content", "--authority", "--system-prompt"],
+    )
+    @pytest.mark.parametrize("form", ["separate", "equals"])
+    def test_explicit_sensitive_options_are_redacted_in_both_forms(option, form):
+        secret = f"SENTINEL-{option[2:].upper()}-SECRET"
+        argv = (
+            ["hermes", "chat", option, secret]
+            if form == "separate"
+            else ["hermes", "chat", f"{option}={secret}"]
+        )
+    
+        execution_path = _redacted_execution_path(argv)
+    
+>       assert secret not in execution_path
+E       AssertionError: assert 'SENTINEL-SY...ROMPT-SECRET' not in 'hermes chat...ROMPT-SECRET'
+E         
+E         'SENTINEL-SYSTEM-PROMPT-SECRET' is contained here:
+E           hermes chat --system-prompt SENTINEL-SYSTEM-PROMPT-SECRET
+
+tests/hermes_cli/test_execution_provenance.py:221: AssertionError
+__ test_explicit_sensitive_options_are_redacted_in_both_forms[equals---body] ___
+
+option = '--body', form = 'equals'
+
+    @pytest.mark.parametrize(
+        "option",
+        ["--body", "--message", "--content", "--authority", "--system-prompt"],
+    )
+    @pytest.mark.parametrize("form", ["separate", "equals"])
+    def test_explicit_sensitive_options_are_redacted_in_both_forms(option, form):
+        secret = f"SENTINEL-{option[2:].upper()}-SECRET"
+        argv = (
+            ["hermes", "chat", option, secret]
+            if form == "separate"
+            else ["hermes", "chat", f"{option}={secret}"]
+        )
+    
+        execution_path = _redacted_execution_path(argv)
+    
+>       assert secret not in execution_path
+E       AssertionError: assert 'SENTINEL-BODY-SECRET' not in 'hermes chat...-BODY-SECRET'
+E         
+E         'SENTINEL-BODY-SECRET' is contained here:
+E           hermes chat --body=SENTINEL-BODY-SECRET
+
+tests/hermes_cli/test_execution_provenance.py:221: AssertionError
+_ test_explicit_sensitive_options_are_redacted_in_both_forms[equals---message] _
+
+option = '--message', form = 'equals'
+
+    @pytest.mark.parametrize(
+        "option",
+        ["--body", "--message", "--content", "--authority", "--system-prompt"],
+    )
+    @pytest.mark.parametrize("form", ["separate", "equals"])
+    def test_explicit_sensitive_options_are_redacted_in_both_forms(option, form):
+        secret = f"SENTINEL-{option[2:].upper()}-SECRET"
+        argv = (
+            ["hermes", "chat", option, secret]
+            if form == "separate"
+            else ["hermes", "chat", f"{option}={secret}"]
+        )
+    
+        execution_path = _redacted_execution_path(argv)
+    
+>       assert secret not in execution_path
+E       AssertionError: assert 'SENTINEL-MESSAGE-SECRET' not in 'hermes chat...SSAGE-SECRET'
+E         
+E         'SENTINEL-MESSAGE-SECRET' is contained here:
+E           hermes chat --message=SENTINEL-MESSAGE-SECRET
+
+tests/hermes_cli/test_execution_provenance.py:221: AssertionError
+_ test_explicit_sensitive_options_are_redacted_in_both_forms[equals---content] _
+
+option = '--content', form = 'equals'
+
+    @pytest.mark.parametrize(
+        "option",
+        ["--body", "--message", "--content", "--authority", "--system-prompt"],
+    )
+    @pytest.mark.parametrize("form", ["separate", "equals"])
+    def test_explicit_sensitive_options_are_redacted_in_both_forms(option, form):
+        secret = f"SENTINEL-{option[2:].upper()}-SECRET"
+        argv = (
+            ["hermes", "chat", option, secret]
+            if form == "separate"
+            else ["hermes", "chat", f"{option}={secret}"]
+        )
+    
+        execution_path = _redacted_execution_path(argv)
+    
+>       assert secret not in execution_path
+E       AssertionError: assert 'SENTINEL-CONTENT-SECRET' not in 'hermes chat...NTENT-SECRET'
+E         
+E         'SENTINEL-CONTENT-SECRET' is contained here:
+E           hermes chat --content=SENTINEL-CONTENT-SECRET
+
+tests/hermes_cli/test_execution_provenance.py:221: AssertionError
+_ test_explicit_sensitive_options_are_redacted_in_both_forms[equals---authority] _
+
+option = '--authority', form = 'equals'
+
+    @pytest.mark.parametrize(
+        "option",
+        ["--body", "--message", "--content", "--authority", "--system-prompt"],
+    )
+    @pytest.mark.parametrize("form", ["separate", "equals"])
+    def test_explicit_sensitive_options_are_redacted_in_both_forms(option, form):
+        secret = f"SENTINEL-{option[2:].upper()}-SECRET"
+        argv = (
+            ["hermes", "chat", option, secret]
+            if form == "separate"
+            else ["hermes", "chat", f"{option}={secret}"]
+        )
+    
+        execution_path = _redacted_execution_path(argv)
+    
+>       assert secret not in execution_path
+E       AssertionError: assert 'SENTINEL-AUTHORITY-SECRET' not in 'hermes chat...ORITY-SECRET'
+E         
+E         'SENTINEL-AUTHORITY-SECRET' is contained here:
+E           hermes chat --authority=SENTINEL-AUTHORITY-SECRET
+
+tests/hermes_cli/test_execution_provenance.py:221: AssertionError
+_ test_explicit_sensitive_options_are_redacted_in_both_forms[equals---system-prompt] _
+
+option = '--system-prompt', form = 'equals'
+
+    @pytest.mark.parametrize(
+        "option",
+        ["--body", "--message", "--content", "--authority", "--system-prompt"],
+    )
+    @pytest.mark.parametrize("form", ["separate", "equals"])
+    def test_explicit_sensitive_options_are_redacted_in_both_forms(option, form):
+        secret = f"SENTINEL-{option[2:].upper()}-SECRET"
+        argv = (
+            ["hermes", "chat", option, secret]
+            if form == "separate"
+            else ["hermes", "chat", f"{option}={secret}"]
+        )
+    
+        execution_path = _redacted_execution_path(argv)
+    
+>       assert secret not in execution_path
+E       AssertionError: assert 'SENTINEL-SY...ROMPT-SECRET' not in 'hermes chat...ROMPT-SECRET'
+E         
+E         'SENTINEL-SYSTEM-PROMPT-SECRET' is contained here:
+E           hermes chat --system-prompt=SENTINEL-SYSTEM-PROMPT-SECRET
+
+tests/hermes_cli/test_execution_provenance.py:221: AssertionError
+=========================== short test summary info ============================
+FAILED tests/hermes_cli/test_execution_provenance.py::test_explicit_sensitive_options_are_redacted_in_both_forms[separate---body]
+FAILED tests/hermes_cli/test_execution_provenance.py::test_explicit_sensitive_options_are_redacted_in_both_forms[separate---message]
+FAILED tests/hermes_cli/test_execution_provenance.py::test_explicit_sensitive_options_are_redacted_in_both_forms[separate---content]
+FAILED tests/hermes_cli/test_execution_provenance.py::test_explicit_sensitive_options_are_redacted_in_both_forms[separate---authority]
+FAILED tests/hermes_cli/test_execution_provenance.py::test_explicit_sensitive_options_are_redacted_in_both_forms[separate---system-prompt]
+FAILED tests/hermes_cli/test_execution_provenance.py::test_explicit_sensitive_options_are_redacted_in_both_forms[equals---body]
+FAILED tests/hermes_cli/test_execution_provenance.py::test_explicit_sensitive_options_are_redacted_in_both_forms[equals---message]
+FAILED tests/hermes_cli/test_execution_provenance.py::test_explicit_sensitive_options_are_redacted_in_both_forms[equals---content]
+FAILED tests/hermes_cli/test_execution_provenance.py::test_explicit_sensitive_options_are_redacted_in_both_forms[equals---authority]
+FAILED tests/hermes_cli/test_execution_provenance.py::test_explicit_sensitive_options_are_redacted_in_both_forms[equals---system-prompt]
+======================== 10 failed, 24 passed in 1.05s =========================
+
+=== 1 file with test failures (10 tests failed) ===
+  tests/hermes_cli/test_execution_provenance.py  (10 tests failed)

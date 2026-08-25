@@ -1,0 +1,158 @@
+{
+ "sandbox": "/Users/rfais370/.hermes/profiles/mission-ctrl/tmp/mc-harness-n45m2hxj",
+ "classifier_source": "REAL enforcer import",
+ "events": [
+  "tick 1: t-ordinary: claimed (answer-door custody, no worker)",
+  "tick 1: t-ordinary: contract SYNTHESIZED by REAL repair-4 module",
+  "tick 2: t-ordinary: executed by bridge, artifact, review-ready",
+  "tick 5: t-ordinary: XO lane created by REAL classifier",
+  "tick 6: t-ordinary: XO executed + terminal"
+ ],
+ "baseline": [
+  {
+   "assertion": "A1 claimed within SLA",
+   "result": "PASS",
+   "evidence": "claimed_tick=1 (answer-door custody)"
+  },
+  {
+   "assertion": "A2 claim followed by real execution (artifact) within SLA",
+   "result": "PASS",
+   "evidence": "artifact_tick=2 (ordinary task has no bridge contract: R1)"
+  },
+  {
+   "assertion": "A3 disposition routing without subject-prefix (REAL enforcer import)",
+   "result": "PASS",
+   "evidence": "xo_lane_tick=5"
+  },
+  {
+   "assertion": "A4 exactly one terminal state within run",
+   "result": "PASS",
+   "evidence": "terminal_tick=6"
+  },
+  {
+   "assertion": "A5 no stale/zombie residue at exit",
+   "result": "PASS",
+   "evidence": "final lifecycle_state='completed'"
+  },
+  {
+   "assertion": "A6 contract task not serialized behind unrelated worker (spawn-one)",
+   "result": "PASS",
+   "evidence": "bridge share 4 with 1 live -> available 3; kanban cap 2; partition total 6 == 6"
+  },
+  {
+   "assertion": "A7 requester receives verified return receipt (REAL enforcer, real schema)",
+   "result": "PASS",
+   "evidence": "return rows to requester=1, sha in body=True, RETURN_SENT marker=True, pass1=1 sent, pass2=0 sent (must be 0)"
+  },
+  {
+   "assertion": "A8 contract XO_VERIFICATION_REQUIRED: false suppresses XO lane (REAL classifier)",
+   "result": "PASS",
+   "evidence": "false-flag row routed to XO=False (must be False), true-flag twin routed=True (must be True)"
+  },
+  {
+   "assertion": "A9 malformed bridge contract is contained (REAL validator rejects)",
+   "result": "PASS",
+   "evidence": "gaps=20 (first: ['missing_AUTHORITY_SOURCE', 'missing_MISSION_ID', 'missing_TASK_ID_or_STAFF_BUS_ID'])"
+  },
+  {
+   "assertion": "A10 bus trusted-waiver design holds both directions (REAL bus module)",
+   "result": "PASS",
+   "evidence": "untrusted s5 false-waiver still requires XO=True (must be True), xo-sent false-waiver requires XO=False (must be False)"
+  },
+  {
+   "assertion": "A11 enforcer false-flag lanes carry bus-honored waiver authority (REAL chain)",
+   "result": "PASS",
+   "evidence": "lane approval_id present=True (must be True), bus honors waiver=True, direct completion succeeded=True"
+  },
+  {
+   "assertion": "A12 has_forward_path tolerates rows without child-count columns (REAL enforcer)",
+   "result": "PASS",
+   "evidence": "bare row handled, verdict=False (must be False: no proof of a path)"
+  },
+  {
+   "assertion": "A13 partial authored contract is normalized and executable (REAL chain)",
+   "result": "PASS",
+   "evidence": "normalized=True, gaps=[]"
+  },
+  {
+   "assertion": "A14 claimed row without worker proof requires active recovery (REAL reconciler)",
+   "result": "PASS",
+   "evidence": "findings=['open_without_execution_proof']"
+  },
+  {
+   "assertion": "A15 recoverable Commander-NO packet is suppressed; exact YES can emit (REAL firewall)",
+   "result": "PASS",
+   "evidence": "NO emitted=False; YES emitted=True; health tri-state=[True, True, True]"
+  },
+  {
+   "assertion": "A16 Staff Bus/bridge/Kanban/artifact/hash clean chain reconciles (REAL reconciler)",
+   "result": "PASS",
+   "evidence": "clean=True, findings=[]"
+  },
+  {
+   "assertion": "A17 changed artifact invalidates stale exact-hash review without paging Commander (REAL reconciler)",
+   "result": "PASS",
+   "evidence": "findings=['artifact_hash_mismatch', 'staff_recovery_required_commander_no'], Commander allowed=False"
+  },
+  {
+   "assertion": "A18 active, dependency-queued, or evidence-terminal states are valid closure paths (REAL reconciler)",
+   "result": "PASS",
+   "evidence": "valid states=[True, True, True]"
+  },
+  {
+   "assertion": "A19 escaped and canonical Commander fields preserve NO/YES semantics (REAL health parser)",
+   "result": "PASS",
+   "evidence": "live field semantics=[True, True, True]"
+  },
+  {
+   "assertion": "A20 terminal archive rows do not become active artifact/recovery debt (REAL reconciler)",
+   "result": "PASS",
+   "evidence": "archive states clean=[True, True, True]"
+  },
+  {
+   "assertion": "A21 live execution-bridge worker suppresses stale escalation (REAL Staff Bus)",
+   "result": "PASS",
+   "evidence": "result={'stale_detected': 0, 'skipped_active_worker': 1, 'skipped_xo_review_ready': 0, 'skipped_formal_blocker': 0, 'skipped_informational_no_claim': 0, 'skipped_invalid_stale_after': 0}, state=in_progress"
+  },
+  {
+   "assertion": "A22 fresh-process terminal verifier preserves completed exact-hash worker evidence (REAL bridge)",
+   "result": "PASS",
+   "evidence": "result={'ok': True, 'reason': 'ok', 'state': 'completed', 'artifact_path': '/Users/rfais370/.hermes/profiles/mission-ctrl/tmp/mc-harness-n45m2hxj/fresh-terminal-artifact.md', 'artifact_sha256': '672eb8316fec83f94119a4193f9fc552513d56a147502f8be4830e017d817831', 'artifact_count': 1, 'attached_match': True, 'result_summary': 'done', 'failure_reason': None, 'verification_process': 'fresh'}"
+  },
+  {
+   "assertion": "A23 exact bounded Reel authority survives synthesis and validates (REAL chain)",
+   "result": "PASS",
+   "evidence": "synth=eligible, no_external=false, gaps=[]"
+  },
+  {
+   "assertion": "A24 original Commander alert-then-publish authority survives synthesis (REAL chain)",
+   "result": "PASS",
+   "evidence": "synth=eligible, gaps=[]"
+  },
+  {
+   "assertion": "A25 ambiguous external action fails closed before contract/Kanban creation (REAL synthesis)",
+   "result": "PASS",
+   "evidence": "result={'synthesized': False, 'reason': 'external_action_requires_exact_bounded_authority'}"
+  },
+  {
+   "assertion": "A26 contradictory external authority plus NO_EXTERNAL_ACTION true is rejected (REAL validator)",
+   "result": "PASS",
+   "evidence": "gaps=['contradictory_external_contract_no_external_action_true']"
+  },
+  {
+   "assertion": "A27 external success requires platform IDs, permalinks, and authenticated read-back (REAL receipt guard)",
+   "result": "PASS",
+   "evidence": "incomplete={'ok': False, 'reason': 'external_platform_receipts_missing', 'missing': ['READINESS_MESSAGE_ID', 'READINESS_DELIVERY_READBACK', 'INSTAGRAM_MEDIA_OBJECT_ID', 'INSTAGRAM_PERMALINK', 'INSTAGRAM_AUTHENTICATED_READBACK', 'FACEBOOK_POST_ID', 'FACEBOOK_PERMALINK', 'FACEBOOK_AUTHENTICATED_READBACK']}, complete={'ok': True, 'reason': 'external_platform_receipts_verified', 'writes': 3, 'limit': 3}"
+  },
+  {
+   "assertion": "A28 external retry is one attempt and worker prompt is mission-isolated/Commander-clean (REAL bridge)",
+   "result": "PASS",
+   "evidence": "max_attempts=1, prompt_guards=[True, True, True]"
+  },
+  {
+   "assertion": "A29 evidence-backed formal blocker is recognized as protected from stale escalation (REAL bus)",
+   "result": "PASS",
+   "evidence": "recognized=True"
+  }
+ ]
+}

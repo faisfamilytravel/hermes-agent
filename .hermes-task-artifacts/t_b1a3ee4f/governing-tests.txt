@@ -1,0 +1,21 @@
+▶ running per-file parallel test suite via run_tests_parallel.py
+  (TZ=UTC LANG=C.UTF-8 PYTHONHASHSEED=0; clean env)
+Discovered 4 test files (41 tests) under ['tests/hermes_cli/test_execution_provenance.py', 'tests/acp/test_session_provenance.py', 'tests/tools/test_skill_provenance.py', 'tests/docker/test_main_invocation.py']; running with -j 36
+[ 12.2% |     5/41 | ✓0 | ✗0] ✓ tests/docker/test_main_invocation.py (5s, 0.2s)
+[ 24.4% |    10/41 | ✓5 | ✗0] ✓ tests/tools/test_skill_provenance.py (5✓, 0.5s)
+[ 41.5% |    17/41 | ✓12 | ✗ 0] ✓ tests/acp/test_session_provenance.py (7✓, 0.5s)
+[100.0% |    41/41 | ✓36 | ✗ 0] ✓ tests/hermes_cli/test_execution_provenance.py (24✓, 0.8s)
+
+=== Summary: 4 files, 36 tests passed, 0 failed (100% complete) in 0.8s (36 workers) ===
+  Durations cached to test_durations.json (4 files)
+
+=== Per-file subprocess time distribution ===
+  Files:   4
+  Total subprocess CPU-wall: 2.0s  (runner wall: 0.8s, parallelism: 36x)
+  P50: 0.54s  P90: 0.84s  P95: 0.84s  P99: 0.84s  Max: 0.84s
+  <1s: 4 files (100%)  <2s: 4 files (100%)
+  Top 10 slowest:
+      0.84s  tests/hermes_cli/test_execution_provenance.py
+      0.54s  tests/acp/test_session_provenance.py
+      0.46s  tests/tools/test_skill_provenance.py
+      0.15s  tests/docker/test_main_invocation.py

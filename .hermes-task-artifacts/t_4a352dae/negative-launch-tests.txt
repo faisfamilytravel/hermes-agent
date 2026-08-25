@@ -1,0 +1,8 @@
+FORM: python3 -m hermes_cli.main -p s6 chat -q test
+RC=77
+STDERR=Error: cross-profile execution csm->s6 requires structured authority 
+
+FORM: env HERMES_HOME=/Users/rfais370/.hermes/profiles/s6 python3 -m hermes_cli.main chat -q test
+RC=77
+STDERR=Error: cross-profile execution csm->s6 requires structured authority 
+

@@ -1,0 +1,179 @@
+diff --git a/gateway/slash_commands.py b/gateway/slash_commands.py
+index b2b8089b5..dcf3efb5c 100644
+--- a/gateway/slash_commands.py
++++ b/gateway/slash_commands.py
+@@ -631,6 +631,17 @@ class GatewaySlashCommandsMixin:
+             t("gateway.status.platforms", platforms=', '.join(connected_platforms)),
+         ])
+ 
++        # Include shared cross-profile execution custody so direct/untracked
++        # work cannot disappear behind this profile-local status view.
++        try:
++            from hermes_cli.execution_provenance import format_execution_status
++
++            execution_lines = format_execution_status()
++        except Exception as exc:
++            execution_lines = [f"Execution provenance unavailable: {exc}"]
++        if execution_lines:
++            lines.extend(["", "Cross-profile executions:", *execution_lines])
++
+         return "\n".join(lines)
+ 
+     @staticmethod
+diff --git a/hermes_cli/kanban_db.py b/hermes_cli/kanban_db.py
+index 4b031287f..5e98b089b 100644
+--- a/hermes_cli/kanban_db.py
++++ b/hermes_cli/kanban_db.py
+@@ -5639,6 +5639,11 @@ class DispatchResult:
+     subsequent tick when the assignee has capacity. Separate bucket so
+     telemetry / dashboards can show "this profile is busy" vs
+     "task is genuinely stuck"."""
++    skipped_dispatch_guard: list[tuple[str, str]] = field(default_factory=list)
++    """Tasks denied by an operator-configured dispatch guard, as
++    ``(task_id, reason)`` pairs. Guard denial is fail-closed and leaves the
++    task unclaimed in ``ready`` so corrected authority evidence can release it
++    on a later tick without consuming a spawn-failure retry."""
+     crashed: list[str] = field(default_factory=list)
+     """Task ids reclaimed because their worker PID disappeared."""
+     auto_blocked: list[str] = field(default_factory=list)
+@@ -6863,6 +6868,7 @@ def dispatch_once(
+     board: Optional[str] = None,
+     default_assignee: Optional[str] = None,
+     max_in_progress_per_profile: Optional[int] = None,
++    dispatch_guard_fn=None,
+ ) -> DispatchResult:
+     """Run one dispatcher tick under the board's single-writer lock.
+ 
+@@ -6897,6 +6903,7 @@ def dispatch_once(
+             board=board,
+             default_assignee=default_assignee,
+             max_in_progress_per_profile=max_in_progress_per_profile,
++            dispatch_guard_fn=dispatch_guard_fn,
+         )
+     with _dispatch_tick_lock(db_path) as held:
+         if not held:
+@@ -6913,6 +6920,7 @@ def dispatch_once(
+             board=board,
+             default_assignee=default_assignee,
+             max_in_progress_per_profile=max_in_progress_per_profile,
++            dispatch_guard_fn=dispatch_guard_fn,
+         )
+ 
+ 
+@@ -6929,6 +6937,7 @@ def _dispatch_once_locked(
+     board: Optional[str] = None,
+     default_assignee: Optional[str] = None,
+     max_in_progress_per_profile: Optional[int] = None,
++    dispatch_guard_fn=None,
+ ) -> DispatchResult:
+     """Run one dispatcher tick.
+ 
+@@ -7141,6 +7150,29 @@ def _dispatch_once_locked(
+                     (row["id"], row_assignee, current)
+                 )
+                 continue
++        # Optional operator dispatch interlock. It runs after routing and
++        # concurrency checks but before respawn checks, claim mutation, or
++        # worker creation. Any exception or malformed response fails closed.
++        if dispatch_guard_fn is not None:
++            try:
++                guard_task = get_task(conn, row["id"])
++                decision = dispatch_guard_fn(guard_task, board)
++                if isinstance(decision, tuple):
++                    allowed, reason = bool(decision[0]), str(decision[1] or "")
++                else:
++                    allowed, reason = bool(decision), ""
++            except Exception as exc:
++                allowed, reason = False, f"guard_exception:{type(exc).__name__}:{exc}"
++            if not allowed:
++                reason = reason or "dispatch_guard_denied"
++                result.skipped_dispatch_guard.append((row["id"], reason))
++                if not dry_run:
++                    with write_txn(conn):
++                        _append_event(
++                            conn, row["id"], "dispatch_guard_denied",
++                            {"reason": reason, "board": board or "default"},
++                        )
++                continue
+         # Respawn guard: refuse to re-spawn when useful work is already
+         # in-flight/recent, or when the last failure is a deterministic
+         # blocker (quota / auth). The guard defers the spawn this tick so
+@@ -7609,6 +7641,13 @@ def _default_spawn(
+     prompt = f"work kanban task {task.id}"
+     env = dict(os.environ)
+ 
++    # Preserve the dispatching profile before HERMES_PROFILE is rewritten to
++    # the worker assignee below. The early profile gate records this source in
++    # the shared execution-provenance ledger.
++    env["HERMES_DISPATCH_SOURCE_PROFILE"] = (
++        os.environ.get("HERMES_PROFILE") or "mission-ctrl"
++    )
++
+     # Inject HERMES_HOME so the worker reads the profile-scoped config.yaml
+     # (fallback_providers, toolsets, agent settings, etc.) instead of the root
+     # config.  Without this, `env = dict(os.environ)` copies only the parent's
+diff --git a/hermes_cli/main.py b/hermes_cli/main.py
+index 11451903d..73d8e6f5a 100644
+--- a/hermes_cli/main.py
++++ b/hermes_cli/main.py
+@@ -333,6 +333,44 @@ sys.path.insert(0, str(PROJECT_ROOT))
+ # The flag is stripped from sys.argv so argparse never sees it.
+ # Falls back to ~/.hermes/active_profile for sticky default.
+ # ---------------------------------------------------------------------------
++def _profile_name_from_home(value: str | None) -> str:
++    """Return a profile identity from a profile-scoped HERMES_HOME."""
++    if not value:
++        return ""
++    path = Path(value)
++    if path.parent.name == "profiles":
++        return path.name
++    return "default" if path.name == ".hermes" else ""
++
++
++def _enforce_cross_profile_execution(target: str) -> None:
++    """Fail closed on unproven cross-profile agent launches and record valid ones."""
++    source = (
++        os.environ.get("HERMES_DISPATCH_SOURCE_PROFILE", "").strip()
++        or os.environ.get("HERMES_PROFILE", "").strip()
++        or _profile_name_from_home(os.environ.get("HERMES_HOME"))
++        or "external"
++    )
++    from hermes_cli.execution_provenance import (
++        ExecutionAuthorityError,
++        authorize_profile_execution,
++    )
++
++    try:
++        authorize_profile_execution(
++            source=source,
++            target=target,
++            argv=list(sys.argv),
++            authority_json=os.environ.get("HERMES_EXECUTION_AUTHORITY"),
++            kanban_task=os.environ.get("HERMES_KANBAN_TASK"),
++            kanban_run=os.environ.get("HERMES_KANBAN_RUN_ID"),
++            kanban_claim_lock=os.environ.get("HERMES_KANBAN_CLAIM_LOCK"),
++        )
++    except ExecutionAuthorityError as exc:
++        print(f"Error: {exc}", file=sys.stderr)
++        raise SystemExit(77) from exc
++
++
+ def _apply_profile_override() -> None:
+     """Pre-parse --profile/-p and set HERMES_HOME before imports."""
+     argv = sys.argv[1:]
+@@ -450,6 +488,7 @@ def _apply_profile_override() -> None:
+     hermes_home_env = os.environ.get("HERMES_HOME", "")
+     if profile_name is None and hermes_home_env:
+         if Path(hermes_home_env).parent.name == "profiles":
++            _enforce_cross_profile_execution(Path(hermes_home_env).name)
+             return
+ 
+     # 2. If no flag, check active_profile in the hermes root.
+@@ -479,6 +518,7 @@ def _apply_profile_override() -> None:
+ 
+     # 3. If we found a profile, resolve and set HERMES_HOME
+     if profile_name is not None:
++        _enforce_cross_profile_execution(profile_name)
+         try:
+             from hermes_cli.profiles import resolve_profile_env
+ 

@@ -1,0 +1,693 @@
+diff --git a/tests/hermes_cli/test_apply_profile_override.py b/tests/hermes_cli/test_apply_profile_override.py
+index 377df8079..8e2fbca46 100644
+--- a/tests/hermes_cli/test_apply_profile_override.py
++++ b/tests/hermes_cli/test_apply_profile_override.py
+@@ -11,11 +11,15 @@ active_profile (child-process inheritance contract).
+ 
+ from __future__ import annotations
+ 
++import json
+ import os
+ import sys
++import time
+ from pathlib import Path
+ from types import SimpleNamespace
+ 
++import pytest
++
+ 
+ 
+ def _run_apply_profile_override(
+@@ -199,19 +203,81 @@ class TestApplyProfileOverrideHermesHomeGuard:
+         assert os.environ.get("HERMES_HOME") is None
+         assert sys.argv == argv
+ 
+-    def test_profile_after_chat_subcommand_is_still_consumed(self, tmp_path, monkeypatch):
+-        """Profile flags historically work after normal Hermes subcommands."""
++    def test_unauthorized_external_noninteractive_profile_launch_is_rejected(
++        self, tmp_path, monkeypatch
++    ):
++        """An external unattended launch cannot cross profiles without authority."""
++        monkeypatch.delenv("HERMES_DISPATCH_SOURCE_PROFILE", raising=False)
++        monkeypatch.delenv("HERMES_PROFILE", raising=False)
++
++        with pytest.raises(SystemExit) as exc_info:
++            _run_apply_profile_override(
++                tmp_path,
++                monkeypatch,
++                hermes_home=None,
++                active_profile="coder",
++                argv=["hermes", "chat", "-p", "coder", "-q", "hello"],
++            )
++
++        assert exc_info.value.code == 77
++        assert sys.argv == ["hermes", "chat", "-p", "coder", "-q", "hello"]
++
++    def test_human_interactive_profile_after_chat_is_consumed(
++        self, tmp_path, monkeypatch
++    ):
++        """Interactive profile selection remains intentional and consumes -p."""
++        result = _run_apply_profile_override(
++            tmp_path,
++            monkeypatch,
++            hermes_home=None,
++            active_profile="coder",
++            argv=["hermes", "chat", "-p", "coder"],
++        )
++
++        assert result is not None
++        assert result.endswith("coder")
++        assert sys.argv == ["hermes", "chat"]
++
++    def test_commander_direct_noninteractive_profile_launch_records_redacted_prompt(
++        self, tmp_path, monkeypatch
++    ):
++        """Bounded Commander authority permits the launch and records no prompt."""
++        sentinel = "COMMANDER-DIRECT-PROMPT-SENTINEL"
++        authority = {
++            "authority_class": "commander_direct",
++            "authority_reference": "DEC-TEST-PROFILE-001",
++            "source": "external",
++            "target": "coder",
++            "scope": "one bounded profile integration test",
++            "one_shot": True,
++            "expires_at": time.time() + 300,
++            "execution_id": "profile-integration-exec-001",
++            "evidence": "test_apply_profile_override",
++            "terminal_condition": "test call returns",
++        }
++        monkeypatch.delenv("HERMES_DISPATCH_SOURCE_PROFILE", raising=False)
++        monkeypatch.delenv("HERMES_PROFILE", raising=False)
++        monkeypatch.setenv("HERMES_EXECUTION_AUTHORITY", json.dumps(authority))
++
+         result = _run_apply_profile_override(
+             tmp_path,
+             monkeypatch,
+             hermes_home=None,
+             active_profile="coder",
+-            argv=["hermes", "chat", "-p", "coder", "-q", "hello"],
++            argv=["hermes", "chat", "-p", "coder", "-q", sentinel],
+         )
+ 
++        ledger = tmp_path / ".hermes" / "execution-provenance.jsonl"
++        row = json.loads(ledger.read_text(encoding="utf-8").strip())
+         assert result is not None
+         assert result.endswith("coder")
+-        assert sys.argv == ["hermes", "chat", "-q", "hello"]
++        assert sys.argv == ["hermes", "chat", "-q", sentinel]
++        assert row["authority_class"] == "commander_direct"
++        assert row["source"] == "external"
++        assert row["target"] == "coder"
++        assert sentinel not in row["execution_path"]
++        assert sentinel not in ledger.read_text(encoding="utf-8")
++        assert "[REDACTED]" in row["execution_path"]
+ 
+     def test_top_level_profile_after_value_flag_is_consumed(self, tmp_path, monkeypatch):
+         """Top-level --profile still works after other top-level value flags."""
+diff --git a/hermes_cli/execution_provenance.py b/hermes_cli/execution_provenance.py
+new file mode 100644
+index 000000000..57e7b6aa4
+--- /dev/null
++++ b/hermes_cli/execution_provenance.py
+@@ -0,0 +1,310 @@
++"""Structured provenance and visibility for bounded cross-profile executions.
++
++This is a same-user policy boundary, not hostile-process isolation. A process
++running as the same OS user can alter its environment or the ledger. The
++module provides fail-closed Hermes entry-point enforcement and an auditable
++record, but does not claim cryptographic authority.
++"""
++
++from __future__ import annotations
++
++import fcntl
++import json
++import os
++import shlex
++import sqlite3
++import time
++from pathlib import Path
++from typing import Any
++
++_REQUIRED_COMMANDER_FIELDS = {
++    "authority_class", "authority_reference", "source", "target", "scope",
++    "one_shot", "expires_at", "execution_id", "evidence", "terminal_condition",
++}
++_READ_ONLY_FORMS = {
++    ("gateway", "status"), ("gateway", "health"), ("profile", "list"),
++    ("kanban", "list"), ("kanban", "show"), ("kanban", "log"),
++    ("kanban", "stats"), ("session", "list"), ("session", "search"),
++}
++_PROMPT_FLAGS = {"-q", "--query", "-z", "--prompt"}
++_SENSITIVE_ARG_TERMS = {
++    "authorization", "cookie", "credential", "credentials", "passphrase",
++    "passwd", "password", "secret", "token",
++}
++_SENSITIVE_KEY_PREFIXES = {
++    "access", "api", "auth", "authentication", "client", "encryption",
++    "private", "secret", "signing", "webhook",
++}
++_EXACT_SENSITIVE_OPTIONS = {
++    "--authority", "--body", "--content", "--message", "--system-prompt",
++}
++
++
++class ExecutionAuthorityError(RuntimeError):
++    """Raised when a cross-profile execution lacks valid bounded authority."""
++
++
++def _ledger_path() -> Path:
++    return Path.home() / ".hermes" / "execution-provenance.jsonl"
++
++
++def _command_words(argv: list[str]) -> list[str]:
++    words: list[str] = []
++    skip = False
++    for arg in argv[1:]:
++        if skip:
++            skip = False
++            continue
++        if arg in {"-p", "--profile"}:
++            skip = True
++            continue
++        if arg.startswith("--profile=") or arg.startswith("-"):
++            continue
++        words.append(arg)
++    if words[:2] == ["-m", "hermes_cli.main"]:
++        words = words[2:]
++    return words
++
++
++def is_read_only_invocation(argv: list[str]) -> bool:
++    words = _command_words(argv)
++    return len(words) >= 2 and tuple(words[:2]) in _READ_ONLY_FORMS
++
++
++def is_agent_invocation(argv: list[str]) -> bool:
++    if "chat" in argv[1:]:
++        return True
++    admin_commands = {
++        "gateway", "profile", "kanban", "session", "logs", "config", "setup",
++        "tools", "skills", "cron", "mcp", "version", "update", "uninstall",
++        "dashboard", "desktop", "doctor", "models", "fallback", "completion",
++    }
++    return not any(arg in admin_commands for arg in argv[1:])
++
++
++def _is_noninteractive(argv: list[str]) -> bool:
++    return any(arg in _PROMPT_FLAGS or arg.startswith(("--query=", "--prompt="))
++               for arg in argv[1:])
++
++
++def _is_sensitive_option(arg: str) -> bool:
++    """Return whether a long option name conventionally carries secret material."""
++    if not arg.startswith("--"):
++        return False
++    option = arg.split("=", 1)[0]
++    if option in _EXACT_SENSITIVE_OPTIONS:
++        return True
++    name = option[2:].lower().replace("_", "-")
++    terms = [term for term in name.split("-") if term]
++    if not terms:
++        return False
++    if terms[-1] in _SENSITIVE_ARG_TERMS:
++        return True
++    return terms[-1] == "key" and any(
++        term in _SENSITIVE_KEY_PREFIXES for term in terms[:-1])
++
++
++def _redacted_execution_path(argv: list[str]) -> str:
++    safe = list(argv)
++    redact_next = False
++    for index, arg in enumerate(safe):
++        if redact_next:
++            safe[index] = "[REDACTED]"
++            redact_next = False
++            continue
++        option, separator, _value = arg.partition("=")
++        if option in _PROMPT_FLAGS or _is_sensitive_option(option):
++            if separator:
++                safe[index] = option + "=[REDACTED]"
++            elif index + 1 < len(safe):
++                redact_next = True
++    return shlex.join(safe)
++
++
++def _pid_alive(pid: int) -> bool:
++    if pid <= 0:
++        return False
++    try:
++        os.kill(pid, 0)
++    except (ProcessLookupError, PermissionError, OSError):
++        return False
++    return True
++
++
++def _load_rows(path: Path) -> list[dict[str, Any]]:
++    if not path.exists():
++        return []
++    rows: list[dict[str, Any]] = []
++    try:
++        for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
++            try:
++                value = json.loads(line)
++            except json.JSONDecodeError:
++                continue
++            if isinstance(value, dict):
++                rows.append(value)
++    except OSError:
++        return []
++    return rows
++
++
++def _append_row_once(path: Path, row: dict[str, Any], *, reject_replay: bool) -> None:
++    """Append under an exclusive lock, atomically consuming one-shot IDs."""
++    path.parent.mkdir(parents=True, exist_ok=True)
++    fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
++    try:
++        fcntl.flock(fd, fcntl.LOCK_EX)
++        if reject_replay:
++            os.lseek(fd, 0, os.SEEK_SET)
++            prior = os.read(fd, os.fstat(fd).st_size).decode("utf-8", errors="replace")
++            execution_id = str(row.get("execution_id"))
++            for line in prior.splitlines():
++                try:
++                    value = json.loads(line)
++                except json.JSONDecodeError:
++                    continue
++                if isinstance(value, dict) and str(value.get("execution_id")) == execution_id:
++                    raise ExecutionAuthorityError("one-shot execution ID already used")
++        os.lseek(fd, 0, os.SEEK_END)
++        os.write(fd, (json.dumps(row, sort_keys=True) + "\n").encode("utf-8"))
++        os.fsync(fd)
++    finally:
++        fcntl.flock(fd, fcntl.LOCK_UN)
++        os.close(fd)
++
++
++def _validate_kanban_custody(*, source: str, target: str, task_id: str,
++                             run_id: str, claim_lock: str, db_path: Path,
++                             pid: int) -> None:
++    if source != "mission-ctrl":
++        raise ExecutionAuthorityError("Kanban custody requires Mission Control source")
++    if not db_path.is_file():
++        raise ExecutionAuthorityError("Kanban custody database is unavailable")
++    try:
++        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
++        conn.row_factory = sqlite3.Row
++        task = conn.execute(
++            "SELECT assignee, status, claim_lock, claim_expires, current_run_id, worker_pid "
++            "FROM tasks WHERE id = ?", (task_id,),
++        ).fetchone()
++        run = conn.execute(
++            "SELECT task_id, profile, status, claim_lock, claim_expires, worker_pid "
++            "FROM task_runs WHERE id = ?", (int(run_id),),
++        ).fetchone()
++        conn.close()
++    except (OSError, sqlite3.Error, TypeError, ValueError) as exc:
++        raise ExecutionAuthorityError("Kanban custody lookup failed closed") from exc
++    now = time.time()
++    valid = (
++        task is not None and run is not None
++        and task["assignee"] == target and run["profile"] == target
++        and task["status"] == "running" and run["status"] == "running"
++        and str(task["current_run_id"]) == str(run_id) and run["task_id"] == task_id
++        and task["claim_lock"] == claim_lock and run["claim_lock"] == claim_lock
++        and float(task["claim_expires"] or 0) > now
++        and float(run["claim_expires"] or 0) > now
++        and all(value in (None, pid) for value in (task["worker_pid"], run["worker_pid"]))
++    )
++    if not valid:
++        raise ExecutionAuthorityError("Kanban custody does not match the active assigned run")
++
++
++def authorize_profile_execution(*, source: str, target: str, argv: list[str],
++                                authority_json: str | None,
++                                ledger_path: Path | None = None,
++                                kanban_task: str | None = None,
++                                kanban_run: str | None = None,
++                                kanban_claim_lock: str | None = None,
++                                kanban_db_path: Path | None = None,
++                                pid: int | None = None) -> dict[str, Any] | None:
++    """Authorize and record a cross-profile agent execution."""
++    source = str(source or "").strip()
++    target = str(target or "").strip()
++    if (not source or not target or source == target or not is_agent_invocation(argv)
++            or is_read_only_invocation(argv)):
++        return None
++    if source == "external" and not _is_noninteractive(argv):
++        return None
++
++    path = ledger_path or _ledger_path()
++    now = time.time()
++    if kanban_task and kanban_run and kanban_claim_lock:
++        db_path = kanban_db_path or Path(
++            os.environ.get("HERMES_KANBAN_DB") or Path.home() / ".hermes" / "kanban.db")
++        _validate_kanban_custody(
++            source=source, target=target, task_id=kanban_task, run_id=kanban_run,
++            claim_lock=kanban_claim_lock, db_path=db_path, pid=int(pid or os.getpid()))
++        record: dict[str, Any] = {
++            "authority_class": "mission_control_kanban",
++            "authority_reference": f"kanban:{kanban_task}:run:{kanban_run}",
++            "source": source, "target": target,
++            "scope": f"assigned Kanban task {kanban_task}", "one_shot": True,
++            "expires_at": None, "execution_id": f"kanban-{kanban_task}-run-{kanban_run}",
++            "evidence": f"kanban:{kanban_task}",
++            "terminal_condition": "Kanban terminal action or worker exit",
++        }
++    else:
++        if not authority_json:
++            raise ExecutionAuthorityError(
++                f"cross-profile execution {source}->{target} requires structured authority")
++        try:
++            parsed = json.loads(authority_json)
++        except json.JSONDecodeError as exc:
++            raise ExecutionAuthorityError("structured authority is not valid JSON") from exc
++        if not isinstance(parsed, dict):
++            raise ExecutionAuthorityError("structured authority must be a JSON object")
++        missing = sorted(_REQUIRED_COMMANDER_FIELDS - parsed.keys())
++        if missing:
++            raise ExecutionAuthorityError(f"structured authority missing: {', '.join(missing)}")
++        record = dict(parsed)
++        for field in _REQUIRED_COMMANDER_FIELDS - {"one_shot", "expires_at"}:
++            if not str(record[field]).strip():
++                raise ExecutionAuthorityError(f"authority field {field} must not be empty")
++        if record["authority_class"] != "commander_direct":
++            raise ExecutionAuthorityError("authority class must be commander_direct")
++        if record["source"] != source:
++            raise ExecutionAuthorityError("authority source mismatch")
++        if record["target"] != target:
++            raise ExecutionAuthorityError("authority target mismatch")
++        if record["one_shot"] is not True:
++            raise ExecutionAuthorityError("direct Commander exception must be one-shot")
++        try:
++            expires_at = float(record["expires_at"])
++        except (TypeError, ValueError) as exc:
++            raise ExecutionAuthorityError("authority expiry must be a Unix timestamp") from exc
++        if expires_at <= now:
++            raise ExecutionAuthorityError("structured authority expired")
++
++    record.update({
++        "execution_path": _redacted_execution_path(argv),
++        "kanban_tracked": bool(kanban_task and kanban_run),
++        "pid": int(pid or os.getpid()), "started_at": now, "state": "running",
++    })
++    _append_row_once(path, record,
++                     reject_replay=record.get("authority_class") == "commander_direct")
++    return record
++
++
++def list_execution_status(*, ledger_path: Path | None = None) -> list[dict[str, Any]]:
++    rows = _load_rows(ledger_path or _ledger_path())
++    for row in rows:
++        if row.get("state") == "running" and not _pid_alive(int(row.get("pid") or 0)):
++            row["state"] = "terminal"
++    return sorted(rows, key=lambda row: float(row.get("started_at") or 0), reverse=True)
++
++
++def format_execution_status(*, ledger_path: Path | None = None,
++                            limit: int = 10) -> list[str]:
++    lines: list[str] = []
++    for row in list_execution_status(ledger_path=ledger_path)[:limit]:
++        tracked = "yes" if row.get("kanban_tracked") else "no"
++        lines.append(
++            "Execution "
++            f"{row.get('execution_id', 'unknown')}: source={row.get('source', 'unknown')} "
++            f"authority={row.get('authority_class', 'unknown')}/"
++            f"{row.get('authority_reference', 'unknown')} target={row.get('target', 'unknown')} "
++            f"path={row.get('execution_path', 'unknown')} kanban={tracked} "
++            f"scope={row.get('scope', 'unknown')} one_shot={row.get('one_shot', 'unknown')} "
++            f"expires={row.get('expires_at', 'none')} evidence={row.get('evidence', 'unknown')} "
++            f"terminal={row.get('terminal_condition', 'unknown')} state={row.get('state', 'unknown')}")
++    return lines
+diff --git a/tests/hermes_cli/test_execution_provenance.py b/tests/hermes_cli/test_execution_provenance.py
+new file mode 100644
+index 000000000..42042cea6
+--- /dev/null
++++ b/tests/hermes_cli/test_execution_provenance.py
+@@ -0,0 +1,265 @@
++"""Tests for bounded cross-profile execution provenance."""
++
++from __future__ import annotations
++
++import json
++import os
++import shlex
++import sqlite3
++import threading
++import time
++from pathlib import Path
++
++import pytest
++
++from hermes_cli.execution_provenance import (
++    ExecutionAuthorityError,
++    _redacted_execution_path,
++    authorize_profile_execution,
++    list_execution_status,
++)
++
++
++def _authority(**overrides):
++    data = {
++        "authority_class": "commander_direct",
++        "authority_reference": "DEC-TEST-001",
++        "source": "csm",
++        "target": "s6",
++        "scope": "one bounded test",
++        "one_shot": True,
++        "expires_at": time.time() + 300,
++        "execution_id": "exec-test-001",
++        "evidence": "kanban:t_test",
++        "terminal_condition": "process exits",
++    }
++    data.update(overrides)
++    return data
++
++
++def _kanban_db(path: Path, *, assignee="s6", run_id=9, claim="claim-1"):
++    conn = sqlite3.connect(path)
++    conn.executescript("""
++        CREATE TABLE tasks (id TEXT PRIMARY KEY, assignee TEXT, status TEXT,
++            claim_lock TEXT, claim_expires INTEGER, current_run_id INTEGER,
++            worker_pid INTEGER);
++        CREATE TABLE task_runs (id INTEGER PRIMARY KEY, task_id TEXT,
++            profile TEXT, status TEXT, claim_lock TEXT, claim_expires INTEGER,
++            worker_pid INTEGER);
++    """)
++    expiry = int(time.time()) + 300
++    conn.execute("INSERT INTO tasks VALUES (?, ?, 'running', ?, ?, ?, NULL)",
++                 ("t_1", assignee, claim, expiry, run_id))
++    conn.execute("INSERT INTO task_runs VALUES (?, 't_1', ?, 'running', ?, ?, NULL)",
++                 (run_id, assignee, claim, expiry))
++    conn.commit()
++    conn.close()
++    return path
++
++
++def test_exact_commander_exception_is_recorded(tmp_path):
++    ledger = tmp_path / "executions.jsonl"
++    record = authorize_profile_execution(
++        source="csm", target="s6",
++        argv=["hermes", "-p", "s6", "chat", "-q", "work"],
++        authority_json=json.dumps(_authority()), ledger_path=ledger, pid=os.getpid(),
++    )
++    assert record["authority_class"] == "commander_direct"
++    assert record["authority_reference"] == "DEC-TEST-001"
++    assert record["source"] == "csm"
++    assert record["target"] == "s6"
++    assert record["execution_path"] == "hermes -p s6 chat -q '[REDACTED]'"
++    assert record["kanban_tracked"] is False
++    assert record["state"] == "running"
++    assert list_execution_status(ledger_path=ledger)[0]["execution_id"] == "exec-test-001"
++
++
++def test_independent_cross_profile_chat_is_rejected(tmp_path):
++    with pytest.raises(ExecutionAuthorityError, match="structured authority"):
++        authorize_profile_execution(
++            source="csm", target="s6",
++            argv=["python", "-m", "hermes_cli.main", "chat"],
++            authority_json=None, ledger_path=tmp_path / "executions.jsonl",
++        )
++
++
++def test_mismatched_expired_and_replayed_authority_are_rejected(tmp_path):
++    ledger = tmp_path / "executions.jsonl"
++    with pytest.raises(ExecutionAuthorityError, match="target mismatch"):
++        authorize_profile_execution(source="csm", target="s7", argv=["hermes", "chat"],
++            authority_json=json.dumps(_authority()), ledger_path=ledger)
++    with pytest.raises(ExecutionAuthorityError, match="expired"):
++        authorize_profile_execution(source="csm", target="s6", argv=["hermes", "chat"],
++            authority_json=json.dumps(_authority(expires_at=time.time() - 1)), ledger_path=ledger)
++    payload = json.dumps(_authority())
++    authorize_profile_execution(source="csm", target="s6", argv=["hermes", "chat"],
++        authority_json=payload, ledger_path=ledger)
++    with pytest.raises(ExecutionAuthorityError, match="already used"):
++        authorize_profile_execution(source="csm", target="s6", argv=["hermes", "chat"],
++            authority_json=payload, ledger_path=ledger)
++
++
++def test_kanban_dispatch_is_allowed_and_visible(tmp_path):
++    ledger = tmp_path / "executions.jsonl"
++    record = authorize_profile_execution(
++        source="mission-ctrl", target="s6",
++        argv=["hermes", "-p", "s6", "chat", "-q", "work kanban task t_1"],
++        authority_json=None, ledger_path=ledger, kanban_task="t_1",
++        kanban_run="9", kanban_claim_lock="claim-1",
++        kanban_db_path=_kanban_db(tmp_path / "kanban.db"),
++    )
++    assert record["authority_class"] == "mission_control_kanban"
++    assert record["authority_reference"] == "kanban:t_1:run:9"
++    assert record["kanban_tracked"] is True
++
++
++@pytest.mark.parametrize("source,target,run,claim", [
++    ("csm", "s6", "9", "claim-1"),
++    ("mission-ctrl", "s7", "9", "claim-1"),
++    ("mission-ctrl", "s6", "8", "claim-1"),
++    ("mission-ctrl", "s6", "9", "wrong"),
++])
++def test_forged_or_inherited_kanban_custody_is_rejected(tmp_path, source, target, run, claim):
++    with pytest.raises(ExecutionAuthorityError):
++        authorize_profile_execution(
++            source=source, target=target,
++            argv=["hermes", "-p", target, "chat", "-q", "work"],
++            authority_json=None, ledger_path=tmp_path / "ledger.jsonl",
++            kanban_task="t_1", kanban_run=run, kanban_claim_lock=claim,
++            kanban_db_path=_kanban_db(tmp_path / "kanban.db"),
++        )
++
++
++def test_missing_kanban_database_fails_closed(tmp_path):
++    with pytest.raises(ExecutionAuthorityError, match="Kanban custody"):
++        authorize_profile_execution(
++            source="mission-ctrl", target="s6", argv=["hermes", "-p", "s6", "chat", "-q", "work"],
++            authority_json=None, ledger_path=tmp_path / "ledger.jsonl",
++            kanban_task="t_1", kanban_run="9", kanban_claim_lock="claim-1",
++            kanban_db_path=tmp_path / "missing.db",
++        )
++
++
++def test_external_noninteractive_rejects_but_human_interactive_is_intentional(tmp_path):
++    with pytest.raises(ExecutionAuthorityError, match="structured authority"):
++        authorize_profile_execution(
++            source="external", target="s6",
++            argv=["hermes", "-p", "s6", "chat", "-q", "secret prompt"],
++            authority_json=None, ledger_path=tmp_path / "ledger.jsonl")
++    assert authorize_profile_execution(
++        source="external", target="s6", argv=["hermes", "-p", "s6"],
++        authority_json=None, ledger_path=tmp_path / "ledger.jsonl") is None
++
++
++def test_commander_execution_id_is_consumed_atomically(tmp_path):
++    ledger = tmp_path / "ledger.jsonl"
++    payload = json.dumps(_authority())
++    barrier = threading.Barrier(16)
++    accepted = []
++
++    def attempt():
++        barrier.wait()
++        try:
++            authorize_profile_execution(source="csm", target="s6", argv=["hermes", "chat"],
++                authority_json=payload, ledger_path=ledger)
++            accepted.append(True)
++        except ExecutionAuthorityError:
++            pass
++
++    threads = [threading.Thread(target=attempt) for _ in range(16)]
++    for thread in threads:
++        thread.start()
++    for thread in threads:
++        thread.join()
++    assert len(accepted) == 1
++    assert sum(json.loads(line)["execution_id"] == "exec-test-001"
++               for line in ledger.read_text().splitlines()) == 1
++
++
++def test_prompt_payload_is_redacted_from_ledger(tmp_path):
++    ledger = tmp_path / "ledger.jsonl"
++    record = authorize_profile_execution(
++        source="csm", target="s6",
++        argv=["hermes", "-p", "s6", "chat", "-q", "TOP SECRET BODY"],
++        authority_json=json.dumps(_authority()), ledger_path=ledger)
++    assert "TOP SECRET BODY" not in record["execution_path"]
++    assert "[REDACTED]" in record["execution_path"]
++    assert "TOP SECRET BODY" not in ledger.read_text()
++
++
++@pytest.mark.parametrize(("argv", "secret"), [
++    (["hermes", "chat", "--api-key", "sk-live"], "sk-live"),
++    (["hermes", "chat", "--access_token=opaque-token"], "opaque-token"),
++    (["hermes", "chat", "--client-secret", "oauth-secret"], "oauth-secret"),
++    (["hermes", "chat", "--password=hunter2"], "hunter2"),
++    (["hermes", "chat", "--authorization", "Bearer abc123"], "Bearer abc123"),
++    (["hermes", "chat", "--cookie=session=private"], "session=private"),
++    (["hermes", "chat", "--signing_key", "private-material"], "private-material"),
++    (["hermes", "chat", "--webhook-token=hook-secret"], "hook-secret"),
++])
++def test_sensitive_named_arguments_are_redacted_generically(argv, secret):
++    execution_path = _redacted_execution_path(argv)
++    assert secret not in execution_path
++    assert "[REDACTED]" in execution_path
++
++
++@pytest.mark.parametrize(
++    "option",
++    ["--body", "--message", "--content", "--authority", "--system-prompt"],
++)
++@pytest.mark.parametrize("form", ["separate", "equals"])
++def test_explicit_sensitive_options_are_redacted_in_both_forms(option, form):
++    secret = f"SENTINEL-{option[2:].upper()}-SECRET"
++    argv = (
++        ["hermes", "chat", option, secret]
++        if form == "separate"
++        else ["hermes", "chat", f"{option}={secret}"]
++    )
++
++    execution_path = _redacted_execution_path(argv)
++
++    assert secret not in execution_path
++    assert "[REDACTED]" in execution_path
++
++
++def test_non_sensitive_lookalike_arguments_remain_visible():
++    argv = [
++        "hermes", "chat", "--token-count", "4096", "--password-policy", "strict",
++        "--secret-santa", "enabled", "--cookie-file-count", "2",
++        "--body-format", "markdown", "--message-count", "3",
++        "--content-type", "application/json", "--authority-level", "staff",
++        "--system-prompt-mode", "inherit",
++    ]
++    execution_path = _redacted_execution_path(argv)
++    assert "[REDACTED]" not in execution_path
++    assert execution_path == shlex.join(argv)
++
++
++def test_default_ledger_is_shared_across_profile_home_overlay(monkeypatch, tmp_path):
++    monkeypatch.setattr(Path, "home", lambda: tmp_path)
++    monkeypatch.setenv("HERMES_HOME", str(tmp_path / ".hermes" / "profiles" / "s6"))
++    from hermes_cli.execution_provenance import _ledger_path
++    assert _ledger_path() == tmp_path / ".hermes" / "execution-provenance.jsonl"
++
++
++def test_same_profile_and_read_only_inspection_need_no_authority(tmp_path):
++    ledger = tmp_path / "executions.jsonl"
++    assert authorize_profile_execution(source="csm", target="csm", argv=["hermes", "chat"],
++        authority_json=None, ledger_path=ledger) is None
++    assert authorize_profile_execution(source="csm", target="s6",
++        argv=["hermes", "-p", "s6", "gateway", "status"],
++        authority_json=None, ledger_path=ledger) is None
++    assert not ledger.exists()
++
++
++def test_untracked_process_visibility_and_terminal_state(tmp_path):
++    ledger = tmp_path / "executions.jsonl"
++    ledger.write_text(json.dumps({
++        **_authority(execution_id="exec-dead"),
++        "execution_path": "HERMES_HOME=/tmp/s6 python -m hermes_cli.main chat",
++        "kanban_tracked": False, "pid": 99999999,
++        "started_at": time.time() - 10, "state": "running",
++    }) + "\n", encoding="utf-8")
++    row = list_execution_status(ledger_path=ledger)[0]
++    assert row["kanban_tracked"] is False
++    assert row["state"] == "terminal"

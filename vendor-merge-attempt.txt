@@ -1,0 +1,6 @@
+error: Your local changes to the following files would be overwritten by merge:
+	gateway/kanban_watchers.py
+	tools/send_message_tool.py
+Please commit your changes or stash them before you merge.
+Aborting
+Merge with strategy ort failed.

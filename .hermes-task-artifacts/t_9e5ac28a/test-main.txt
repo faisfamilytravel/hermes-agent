@@ -1,0 +1,3 @@
+▶ running per-file parallel test suite via run_tests_parallel.py
+  (TZ=UTC LANG=C.UTF-8 PYTHONHASHSEED=0; clean env)
+No test files discovered under ['/Users/rfais370/.hermes/hermes-agent/tests/hermes_cli/test_main.py']

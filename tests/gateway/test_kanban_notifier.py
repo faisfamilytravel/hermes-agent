@@ -2,6 +2,7 @@ import asyncio
 import sqlite3
 from pathlib import Path
 
+import pytest
 
 from gateway.config import Platform
 from gateway.kanban_watchers import (
@@ -613,6 +614,59 @@ def test_notifier_delivers_block_loop_detected_triage_ping(tmp_path, monkeypatch
     assert tid in text
     assert "needs credentials" in text
     # Cursor advanced: the event is claimed and not re-delivered.
+    conn = kb.connect()
+    try:
+        _, remaining = kb.unseen_events_for_sub(
+            conn, task_id=tid, platform="telegram", chat_id="chat-1",
+            kinds=["block_loop_detected"],
+        )
+    finally:
+        conn.close()
+    assert remaining == []
+
+
+@pytest.mark.parametrize("block_kind", ["transient", "dependency", "capability"])
+def test_notifier_silences_staff_only_block_loop_without_human_decision(
+    tmp_path, monkeypatch, block_kind,
+):
+    """A staff-only TRIAGE loop must not page a subscriber.
+
+    Regression for t_1f7cda0c: its transient block loop already carried an
+    explicit Commander-decision-NO disposition, but the notifier formatted
+    every loop as ``needs a human decision`` and delivered duplicate noise.
+    The event still has to be claimed so a later valid event is not wedged
+    behind it.
+    """
+    db_path = tmp_path / "transient-block-loop.db"
+    monkeypatch.setenv("HERMES_KANBAN_DB", str(db_path))
+    kb.init_db()
+
+    conn = kb.connect()
+    try:
+        tid = kb.create_task(
+            conn,
+            title=f"t_1f7cda0c {block_kind} staff loop",
+            assignee="s3",
+        )
+        kb.add_notify_sub(conn, task_id=tid, platform="telegram", chat_id="chat-1")
+        kb._append_event(
+            conn, tid, "block_loop_detected",
+            {
+                "reason": "staff recovery continues; Commander decision required: NO",
+                "kind": block_kind,
+                "recurrences": 2,
+                "limit": kb.BLOCK_RECURRENCE_LIMIT,
+            },
+        )
+    finally:
+        conn.close()
+
+    adapter = RecordingAdapter()
+    runner = _make_runner(adapter)
+
+    asyncio.run(_run_one_notifier_tick(monkeypatch, runner))
+
+    assert adapter.sent == []
     conn = kb.connect()
     try:
         _, remaining = kb.unseen_events_for_sub(
