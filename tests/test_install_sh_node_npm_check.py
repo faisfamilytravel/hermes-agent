@@ -41,6 +41,9 @@ def test_check_node_managed_requires_npm() -> None:
     )
     assert expected in text
     assert '[ -f "$HERMES_HOME/node/include/node/common.gypi" ]' in text
+    assert text.index('if [ -x "$HERMES_HOME/node/bin/node" ]') < text.index(
+        'if command -v node &> /dev/null && command -v npm &> /dev/null'
+    )
 
 
 def test_managed_node_exports_its_header_directory_for_node_gyp() -> None:

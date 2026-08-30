@@ -939,6 +939,18 @@ check_node() {
     # every install — including re-runs that skip the Node (re)install below.
     configure_managed_node_npm_prefix
 
+    # Prefer a Hermes-managed Node from a previous run over a system-PATH
+    # symlink back to it, so native-build headers are configured before npm runs.
+    if [ -x "$HERMES_HOME/node/bin/node" ] && [ -x "$HERMES_HOME/node/bin/npm" ] \
+        && [ -f "$HERMES_HOME/node/include/node/common.gypi" ] \
+        && node_satisfies_build "$("$HERMES_HOME/node/bin/node" --version)"; then
+        export PATH="$HERMES_HOME/node/bin:$PATH"
+        configure_managed_node_gyp_headers
+        log_success "Node.js $("$HERMES_HOME/node/bin/node" --version) found (Hermes-managed)"
+        HAS_NODE=true
+        return 0
+    fi
+
     # The system toolchain is only usable when BOTH halves work: a Node new
     # enough for the desktop build AND an npm that can read our .npmrc. A
     # bad-band npm (see npm_supports_npmrc) fails `npm ci` outright, and the
@@ -961,17 +973,6 @@ check_node() {
         log_warn "min-release-age-exclude) — installing Hermes-managed Node $NODE_VERSION instead..."
         install_node
         return
-    fi
-
-    # Prefer a Hermes-managed Node from a previous run over a too-old system one.
-    if [ -x "$HERMES_HOME/node/bin/node" ] && [ -x "$HERMES_HOME/node/bin/npm" ] \
-        && [ -f "$HERMES_HOME/node/include/node/common.gypi" ] \
-        && node_satisfies_build "$("$HERMES_HOME/node/bin/node" --version)"; then
-        export PATH="$HERMES_HOME/node/bin:$PATH"
-        configure_managed_node_gyp_headers
-        log_success "Node.js $("$HERMES_HOME/node/bin/node" --version) found (Hermes-managed)"
-        HAS_NODE=true
-        return 0
     fi
 
     if command -v node &> /dev/null && ! command -v npm &> /dev/null; then
