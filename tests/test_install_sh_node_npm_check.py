@@ -33,13 +33,14 @@ def test_check_node_requires_npm_alongside_node() -> None:
 
 
 def test_check_node_managed_requires_npm() -> None:
-    """The Hermes-managed Node fallback also requires its npm to exist."""
+    """The Hermes-managed fallback requires npm and native-build headers."""
     text = INSTALL_SH.read_text()
     expected = (
         '[ -x "$HERMES_HOME/node/bin/node" ] && '
         '[ -x "$HERMES_HOME/node/bin/npm" ] ' + "\\"
     )
     assert expected in text
+    assert '[ -f "$HERMES_HOME/node/include/node/common.gypi" ]' in text
 
 
 def test_managed_node_exports_its_header_directory_for_node_gyp() -> None:
