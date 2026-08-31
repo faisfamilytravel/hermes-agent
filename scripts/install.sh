@@ -2317,12 +2317,13 @@ run_npm_install_with_retry() {
     local log_file="$1"
     local npm_bin="$2"
     shift 2
-    local attempt=1 rc=0
+    local attempt=1 rc=0 attempt_log
 
     : >"$log_file"
     while [ "$attempt" -le "$NPM_TRANSPORT_ATTEMPTS" ]; do
         printf '\n--- npm transport attempt %s/%s ---\n' \
             "$attempt" "$NPM_TRANSPORT_ATTEMPTS" >>"$log_file"
+        attempt_log="$(mktemp)"
         if run_with_timeout "$NPM_TRANSPORT_ATTEMPT_TIMEOUT" "$npm_bin" \
             --fetch-retries=3 \
             --fetch-retry-mintimeout=1000 \
@@ -2330,18 +2331,23 @@ run_npm_install_with_retry() {
             --fetch-timeout=120000 \
             --maxsockets=1 \
             --loglevel=warn \
-            "$@" >>"$log_file" 2>&1; then
+            "$@" >"$attempt_log" 2>&1; then
+            cat "$attempt_log" >>"$log_file"
+            rm -f "$attempt_log"
             return 0
         else
             rc=$?
         fi
+        cat "$attempt_log" >>"$log_file"
 
-        if ! npm_transport_failure "$log_file"; then
+        if ! npm_transport_failure "$attempt_log"; then
             printf '%s\n' 'npm failure is not a recognized transport/proxy error; not retrying.' >>"$log_file"
+            rm -f "$attempt_log"
             return "$rc"
         fi
         if [ "$attempt" -ge "$NPM_TRANSPORT_ATTEMPTS" ]; then
             printf '%s\n' 'npm transport retries exhausted; registry/proxy failure remains.' >>"$log_file"
+            rm -f "$attempt_log"
             return "$rc"
         fi
         # npm can leave rename staging directories behind when its process
@@ -2351,6 +2357,7 @@ run_npm_install_with_retry() {
         # directory being installed, so this removes only that failed attempt.
         rm -rf -- node_modules
         printf 'npm transport failure; retrying after 5 seconds.\n' >>"$log_file"
+        rm -f "$attempt_log"
         sleep 5
         attempt=$((attempt + 1))
     done
