@@ -24,6 +24,7 @@ import ssl
 import subprocess
 import sys
 import threading
+import time
 from urllib.parse import unquote, urlsplit
 
 ROOT, CERTS, REAL_CA = map(pathlib.Path, sys.argv[1:])
@@ -31,6 +32,8 @@ ROOT, CERTS, REAL_CA = map(pathlib.Path, sys.argv[1:])
 LISTEN_ADDRESS = ('127.0.0.1', 8080)
 MAX_REQUEST_BYTES = 65536
 UPSTREAM_TIMEOUT_SECONDS = 30
+UPSTREAM_TLS_ATTEMPTS = 3
+UPSTREAM_TLS_RETRY_DELAY_SECONDS = 0.25
 CERT_VALIDITY_DAYS = 2
 
 
@@ -150,12 +153,34 @@ def relay(source, destination):
         destination.sendall(chunk)
 
 
+def open_upstream_tls(host: str, port: int, context: ssl.SSLContext) -> ssl.SSLSocket:
+    """Open a direct TLS connection, retrying only failed handshakes.
+
+    The sandbox proxy exists to make one E2E leg representative, but the
+    runner's upstream can transiently close a TLS handshake before any request
+    is sent. Retrying at this boundary is safe: no request bytes have reached
+    the upstream yet. Once a TLS socket is returned, forwarding remains
+    single-attempt so a partially delivered request is never replayed.
+    """
+    for attempt in range(1, UPSTREAM_TLS_ATTEMPTS + 1):
+        raw = None
+        try:
+            raw = socket.create_connection((host, port), timeout=UPSTREAM_TIMEOUT_SECONDS)
+            return context.wrap_socket(raw, server_hostname=host)
+        except (ssl.SSLError, OSError):
+            if raw is not None:
+                raw.close()
+            if attempt == UPSTREAM_TLS_ATTEMPTS:
+                raise
+            time.sleep(UPSTREAM_TLS_RETRY_DELAY_SECONDS)
+    raise RuntimeError("upstream TLS retry loop exited unexpectedly")
+
+
 def forward_https(conn, host, port, request):
     context = ssl.create_default_context(cafile=str(REAL_CA))
-    with socket.create_connection((host, port), timeout=UPSTREAM_TIMEOUT_SECONDS) as raw:
-        with context.wrap_socket(raw, server_hostname=host) as upstream:
-            upstream.sendall(close_request(request))
-            relay(upstream, conn)
+    with open_upstream_tls(host, port, context) as upstream:
+        upstream.sendall(close_request(request))
+        relay(upstream, conn)
 
 
 def forward_http(conn, host, port, request, target):

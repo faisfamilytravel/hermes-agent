@@ -919,6 +919,18 @@ npm_supports_npmrc() {
     return 0
 }
 
+configure_managed_node_gyp_headers() {
+    # A tarball-managed Node keeps its headers beneath the Hermes home rather
+    # than under the FHS default (/usr/local).  Tell node-gyp where they are so
+    # native npm dependencies can compile when a package has no prebuild for
+    # the current platform.  Do not set this for a system Node: its package
+    # manager owns the header location.
+    local node_dir="$HERMES_HOME/node"
+    if [ -f "$node_dir/include/node/common.gypi" ]; then
+        export npm_config_nodedir="$node_dir"
+    fi
+}
+
 check_node() {
     log_info "Checking Node.js (for browser tools)..."
 
@@ -926,6 +938,18 @@ check_node() {
     # off PATH. No-op when there's no managed Node, so this is safe to run on
     # every install — including re-runs that skip the Node (re)install below.
     configure_managed_node_npm_prefix
+
+    # Prefer a Hermes-managed Node from a previous run over a system-PATH
+    # symlink back to it, so native-build headers are configured before npm runs.
+    if [ -x "$HERMES_HOME/node/bin/node" ] && [ -x "$HERMES_HOME/node/bin/npm" ] \
+        && [ -f "$HERMES_HOME/node/include/node/common.gypi" ] \
+        && node_satisfies_build "$("$HERMES_HOME/node/bin/node" --version)"; then
+        export PATH="$HERMES_HOME/node/bin:$PATH"
+        configure_managed_node_gyp_headers
+        log_success "Node.js $("$HERMES_HOME/node/bin/node" --version) found (Hermes-managed)"
+        HAS_NODE=true
+        return 0
+    fi
 
     # The system toolchain is only usable when BOTH halves work: a Node new
     # enough for the desktop build AND an npm that can read our .npmrc. A
@@ -949,15 +973,6 @@ check_node() {
         log_warn "min-release-age-exclude) — installing Hermes-managed Node $NODE_VERSION instead..."
         install_node
         return
-    fi
-
-    # Prefer a Hermes-managed Node from a previous run over a too-old system one.
-    if [ -x "$HERMES_HOME/node/bin/node" ] && [ -x "$HERMES_HOME/node/bin/npm" ] \
-        && node_satisfies_build "$("$HERMES_HOME/node/bin/node" --version)"; then
-        export PATH="$HERMES_HOME/node/bin:$PATH"
-        log_success "Node.js $("$HERMES_HOME/node/bin/node" --version) found (Hermes-managed)"
-        HAS_NODE=true
-        return 0
     fi
 
     if command -v node &> /dev/null && ! command -v npm &> /dev/null; then
@@ -1080,6 +1095,7 @@ install_node() {
     configure_managed_node_npm_prefix
 
     export PATH="$HERMES_HOME/node/bin:$PATH"
+    configure_managed_node_gyp_headers
 
     local installed_ver
     installed_ver=$("$HERMES_HOME/node/bin/node" --version 2>/dev/null)
@@ -2277,6 +2293,76 @@ run_with_timeout() {
     return 124
 }
 
+# The installer can run behind constrained TLS proxies (including the isolated
+# install/update E2E sandbox). npm's default connection fan-out can turn one
+# transient proxy close into a burst of failed fetches. Keep registry work
+# serial, let npm retry individual fetches, and retry the whole install only
+# when its own stderr identifies a transport failure. A package-resolution or
+# lifecycle-script error is therefore reported immediately as an installer
+# defect instead of being mislabeled as a flaky network.
+# Fixed bounds keep the recovery behavior predictable: at most two complete
+# installs and four minutes per attempt. These are installer-internal safety
+# limits, not user configuration.
+NPM_TRANSPORT_ATTEMPTS=2
+NPM_TRANSPORT_ATTEMPT_TIMEOUT=240
+
+npm_transport_failure() {
+    grep -Eiq \
+        'UNEXPECTED_EOF_WHILE_READING|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|socket hang up|network timeout|fetch failed|Exit handler never called' \
+        "$1"
+}
+
+# Usage: run_npm_install_with_retry <log-file> <npm-bin> <npm args...>
+run_npm_install_with_retry() {
+    local log_file="$1"
+    local npm_bin="$2"
+    shift 2
+    local attempt=1 rc=0 attempt_log
+
+    : >"$log_file"
+    while [ "$attempt" -le "$NPM_TRANSPORT_ATTEMPTS" ]; do
+        printf '\n--- npm transport attempt %s/%s ---\n' \
+            "$attempt" "$NPM_TRANSPORT_ATTEMPTS" >>"$log_file"
+        attempt_log="$(mktemp)"
+        if run_with_timeout "$NPM_TRANSPORT_ATTEMPT_TIMEOUT" "$npm_bin" \
+            --fetch-retries=3 \
+            --fetch-retry-mintimeout=1000 \
+            --fetch-retry-maxtimeout=10000 \
+            --fetch-timeout=120000 \
+            --maxsockets=1 \
+            --loglevel=warn \
+            "$@" >"$attempt_log" 2>&1; then
+            cat "$attempt_log" >>"$log_file"
+            rm -f "$attempt_log"
+            return 0
+        else
+            rc=$?
+        fi
+        cat "$attempt_log" >>"$log_file"
+
+        if ! npm_transport_failure "$attempt_log"; then
+            printf '%s\n' 'npm failure is not a recognized transport/proxy error; not retrying.' >>"$log_file"
+            rm -f "$attempt_log"
+            return "$rc"
+        fi
+        if [ "$attempt" -ge "$NPM_TRANSPORT_ATTEMPTS" ]; then
+            printf '%s\n' 'npm transport retries exhausted; registry/proxy failure remains.' >>"$log_file"
+            rm -f "$attempt_log"
+            return "$rc"
+        fi
+        # npm can leave rename staging directories behind when its process
+        # aborts mid-fetch. They turn a healed proxy into ENOTEMPTY on the next
+        # attempt, which is a stale transport artifact rather than a package
+        # or installer defect. The current working directory is the package
+        # directory being installed, so this removes only that failed attempt.
+        rm -rf -- node_modules
+        printf 'npm transport failure; retrying after 5 seconds.\n' >>"$log_file"
+        rm -f "$attempt_log"
+        sleep 5
+        attempt=$((attempt + 1))
+    done
+}
+
 # Return success only when the host is an apt release NEWER than the newest one
 # Playwright's platform resolver recognizes — the exact condition that makes
 # `playwright install` hang uninterruptibly (#35166). We scope the override
@@ -2425,9 +2511,8 @@ install_node_deps() {
         # Capture npm output so failures are diagnosable (#87340).
         local npm_log
         npm_log="$(mktemp)"
-        if ! run_with_timeout "$NODE_DEPS_TIMEOUT" npm install --silent \
-                >"$npm_log" 2>&1; then
-            log_error "npm install failed or timed out; Node.js dependencies were not installed"
+        if ! run_npm_install_with_retry "$npm_log" npm install; then
+            log_error "npm install failed; Node.js dependencies were not installed"
             if [ -s "$npm_log" ]; then
                 log_error "npm output:"
                 cat "$npm_log" >&2
@@ -2541,9 +2626,8 @@ install_node_deps() {
         # Capture npm output so failures are diagnosable (#87340).
         local tui_npm_log
         tui_npm_log="$(mktemp)"
-        if ! run_with_timeout "$NODE_DEPS_TIMEOUT" npm install --silent \
-                >"$tui_npm_log" 2>&1; then
-            log_error "TUI npm install failed or timed out; TUI dependencies were not installed"
+        if ! run_npm_install_with_retry "$tui_npm_log" npm install; then
+            log_error "TUI npm install failed; TUI dependencies were not installed"
             if [ -s "$tui_npm_log" ]; then
                 log_error "npm output:"
                 cat "$tui_npm_log" >&2
@@ -2964,10 +3048,10 @@ ensure_browser() {
     log_file="$(mktemp)"
     # Time-boxed (#39219): a stalled npm registry fetch here would otherwise
     # hang the installer with no progress, same class as the desktop build.
-    if ! run_with_timeout "$NODE_DEPS_TIMEOUT" "$npm_bin" install -g --prefix "$HERMES_HOME/node" --silent --ignore-scripts \
-        "@askjo/camofox-browser@^1.5.2" \
-        >"$log_file" 2>&1; then
-        log_error "npm install failed or timed out:"
+    # run_npm_install_with_retry invokes run_with_timeout for every attempt.
+    if ! run_npm_install_with_retry "$log_file" "$npm_bin" install -g --prefix "$HERMES_HOME/node" --ignore-scripts \
+        "@askjo/camofox-browser@^1.5.2"; then
+        log_error "npm install failed:"
         cat "$log_file" >&2
         rm -f "$log_file"
         return 1
